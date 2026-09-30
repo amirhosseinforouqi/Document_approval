@@ -36,3 +36,7 @@ Automatic alignment checks flag probable amount-row baseline differences, amount
 For more precise comparisons, select a correctly aligned reference PDF using the same template, page dimensions, rotation and page order. Names/text compare left edges; numbers compare right edges and baselines. The report gives the measured left/right/up/down displacement. Default tolerance is 2 PDF points and can be adjusted from 0.5 to 12 points. Different text lengths, text-run segmentation, templates or missing regions may need manual review. Arbitrary PDFs cannot be guaranteed perfectly aligned by these heuristics.
 
 Scanned PDFs retain OCR and preview support, but precise alignment checking is skipped because OCR positions are approximate. Test coverage includes directional shifts, tolerance changes, row and column outliers, mismatched reference dimensions, scan safeguards, visible red canvas overlays, preview navigation and mobile width.
+
+## Click a review result
+
+Every Mismatch and Needs review row is selectable. Click anywhere on the row, or focus it and press Enter or Space, to immediately show its page in the preview and enable red overlays. Alignment findings and locatable field checks highlight the relevant text. General reviews and missing inputs without an identifiable source region still open the preview and explain that there is no precise text location. Passing rows remain informational.

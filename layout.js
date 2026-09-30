@@ -24,5 +24,22 @@ function inspect(page,tolerance=2,reference=null,name=''){
  const unique=issues.filter((r,i,a)=>a.findIndex(x=>x.rect.x===r.rect.x&&x.rect.y===r.rect.y&&x.detail===r.detail)===i);
  return{issues:unique,checked:amounts.length+names.length,note:'Automatic checks flag likely row/column outliers. Upload a correctly aligned PDF with the same template to check absolute left/right/up/down positions.'};
 }
-const api={inspect,tokens};if(typeof module!=='undefined')module.exports=api;else root.LayoutChecker=api;
+function locateFinding(doc,finding,currentPage=0){
+ const mappings={'Income tax and pension amounts':['22','20','52'],'Code 40 included in box 14':['40','14'],'Pension registration number format':['50'],'Dental coverage code':['45'],'EI premium arithmetic':['18','24'],'CPP2 arithmetic':['16A','26'],'CPP at maximum earnings':['16','26'],'CPP annual ceiling':['16'],'CPP2 annual ceiling':['16A'],'EI annual ceiling':['18'],'EI earnings ceiling':['24'],'CPP earnings ceiling':['26'],'Current gross-to-net':['gross','deductions','net'],'Regular earnings':['hours','rate','regular'],'Year-to-date gross-to-net':['ytdGross','ytdDeductions','ytdNet'],'Income less deductions':['15000','23300','23400'],'Net income':['23400','23500','23600'],'Taxable income':doc.type==='T1'?['23600','25700','26000']:['300','deductions','360'],'Balance owing':['43500','48200','48500'],'Refund':['43500','48200','48400']};
+ let keys=finding.fieldKeys||mappings[finding.title]||[];const conflict=finding.title.match(/^Conflicting (?:box|line) (\w+) candidates$/);if(conflict)keys=[conflict[1]];
+ const matches=[];
+ for(let page=0;page<doc.pages.length;page++){
+  for(const t of tokens(doc.pages[page])){
+   const text=t.str.trim();let match=keys.includes(text);
+   for(const key of keys){const candidates=doc.candidates?.[key]||[];if(candidates.some(v=>v.page===page+1&&text.replace(/[$, ]/g,'')===v.value.replace(/[$, ]/g,'')))match=true;}
+   const identity=finding.title==='Name against reference'?doc.name:finding.title==='Address against reference'||finding.title==='Canadian postal code format'?(doc.address||doc.postal):'';
+   if(identity&&text.length>1&&identity.toUpperCase().replace(/[^A-Z0-9]/g,'').includes(text.toUpperCase().replace(/[^A-Z0-9]/g,'')))match=true;
+   if(match)matches.push({page,rect:{x:t.x,y:t.y,width:t.width,height:t.height}});
+  }
+ }
+ const page=Number.isInteger(finding.page)?finding.page-1:(matches.find(m=>m.page===currentPage)||matches[0])?.page??Math.max(0,Math.min(doc.pages.length-1,currentPage));
+ const rects=finding.rect?[finding.rect]:matches.filter(m=>m.page===page).map(m=>m.rect);
+ return{page,rects,note:rects.length?'Selected result: '+finding.title:'Selected result: '+finding.title+'. This check has no precise text location; inspect the page and the review explanation.'};
+}
+const api={inspect,tokens,locateFinding};if(typeof module!=='undefined')module.exports=api;else root.LayoutChecker=api;
 })(globalThis);

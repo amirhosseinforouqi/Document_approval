@@ -24,3 +24,10 @@ assert(L.inspect(page([item('100.00',100,100),item('200.00',100,80),item('300.00
 assert(L.inspect({...reference,method:'OCR'}).checked===0);
 assert(L.inspect({...reference,width:600},2,reference).checked===0);
 console.log('Alignment shifts, tolerance, row/column outliers, reference matching and scan safeguards passed.');
+const navigationDoc={type:'T4',pages:[page([item('14',10,100)]),page([item('1077.48',100,100)])],candidates:{18:[{page:2,value:'1077.48'}]}};
+assert.equal(L.locateFinding(navigationDoc,{title:'EI premium arithmetic'},0).page,1);
+assert.equal(L.locateFinding(navigationDoc,{title:'EI premium arithmetic'},0).rects.length,1);
+assert.equal(L.locateFinding(navigationDoc,{title:'General review'},1).page,1);
+assert(L.locateFinding(navigationDoc,{title:'General review'},1).note.includes('no precise text location'));
+assert.equal(L.locateFinding(navigationDoc,{title:'Text alignment',page:2,rect:{x:10,y:20,width:30,height:10}},0).page,1);
+console.log('Finding navigation, page selection, targeted regions and no-location fallback passed.');
