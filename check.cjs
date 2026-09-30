@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');
+const C=require('./engine.js');
+const t4={type:'T4',year:'2025',province:'ON',confirmed:true,fields:{16:'4034.10','16A':'396',18:'1077.48',24:'65700',26:'81200',50:'0319748'}};
+assert(!C.check(t4).some(x=>x.status==='mismatch'));
+assert(C.check({...t4,fields:{...t4.fields,18:'1100'}}).some(x=>x.status==='mismatch'));
+assert(C.check({...t4,confirmed:false}).every(x=>x.status!=='pass'));
+assert(C.check({...t4,province:'QC'}).some(x=>x.title==='Quebec contribution rules'));
+assert(C.check({type:'Paystub',confirmed:true,fields:{gross:'2000',deductions:'500',net:'1500'}}).some(x=>x.title==='Current gross-to-net'&&x.status==='pass'));
+assert(C.check({type:'T1',confirmed:true,fields:{15000:'100000',23300:'5000',23400:'95000',23500:'0',23600:'95000',25700:'2000',26000:'93000'}}).filter(x=>x.status==='pass').length===3);
+assert(C.check({type:'T2',confirmed:true,fields:{300:'100000',deductions:'20000',360:'80000'}}).some(x=>x.status==='pass'));
+assert(C.amount('')===null);assert(Number.isNaN(C.amount('abc')));assert(C.amount('(1,234.56)')===-1234.56);
+const r=[{y:100,text:'14 165247.19',items:[{str:'14',x:350},{str:'165247.19',x:415}]}];assert.equal(C.candidates(r,'T4')['14'][0].value,'165247.19');
+console.log('Contribution, arithmetic, missing-input, format, confirmation and extraction checks passed.');
