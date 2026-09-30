@@ -26,3 +26,13 @@ Run `node check.cjs` for the small calculation/extraction check. Browser-tested 
 From the repository folder, run `python -m http.server 8000`, then open `http://localhost:8000`. Any static web server works. Opening `index.html` directly may block the browser modules.
 
 The repository contains only application code and documentation, never uploaded PDFs. No build or package installation is required. Run `node check.cjs` to verify the calculation rules.
+
+## Alignment and preview overlays
+
+The preview marks locatable numerical mismatches and alignment findings in red. Use Show on preview to open the affected page. Toggle Show errors in red to inspect the original rendering; the PDF itself is never changed.
+
+Automatic alignment checks flag probable amount-row baseline differences, amount-column right-edge outliers, and name fragments on different baselines. These are review flags, not proof that the layout is wrong. Different rows and columns can be intentional.
+
+For more precise comparisons, select a correctly aligned reference PDF using the same template, page dimensions, rotation and page order. Names/text compare left edges; numbers compare right edges and baselines. The report gives the measured left/right/up/down displacement. Default tolerance is 2 PDF points and can be adjusted from 0.5 to 12 points. Different text lengths, text-run segmentation, templates or missing regions may need manual review. Arbitrary PDFs cannot be guaranteed perfectly aligned by these heuristics.
+
+Scanned PDFs retain OCR and preview support, but precise alignment checking is skipped because OCR positions are approximate. Test coverage includes directional shifts, tolerance changes, row and column outliers, mismatched reference dimensions, scan safeguards, visible red canvas overlays, preview navigation and mobile width.

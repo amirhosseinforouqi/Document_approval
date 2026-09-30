@@ -11,3 +11,16 @@ assert(C.check({type:'T2',confirmed:true,fields:{300:'100000',deductions:'20000'
 assert(C.amount('')===null);assert(Number.isNaN(C.amount('abc')));assert(C.amount('(1,234.56)')===-1234.56);
 const r=[{y:100,text:'14 165247.19',items:[{str:'14',x:350},{str:'165247.19',x:415}]}];assert.equal(C.candidates(r,'T4')['14'][0].value,'165247.19');
 console.log('Contribution, arithmetic, missing-input, format, confirmation and extraction checks passed.');
+const L=require('./layout.js');
+const item=(str,x,y,width=45)=>({str,x,y,width,height:10});
+const page=items=>({width:612,height:792,rotation:0,method:'PDF text',rows:[{y:100,items}]});
+const reference=page([item('100.00',100,100),item('EXAMPLE',200,100,60)]);
+assert.equal(L.inspect(reference,2,reference).issues.length,0);
+const moved=page([item('100.00',106,105),item('EXAMPLE',194,96,60)]);
+assert.equal(L.inspect(moved,2,reference).issues.filter(x=>x.status==='mismatch').length,2);
+assert.equal(L.inspect(moved,8,reference).issues.length,0);
+assert(L.inspect(page([item('100.00',100,100),item('200.00',200,106)])).issues.length===2);
+assert(L.inspect(page([item('100.00',100,100),item('200.00',100,80),item('300.00',100,60),item('400.00',107,40)])).issues.some(x=>x.detail.includes('column')));
+assert(L.inspect({...reference,method:'OCR'}).checked===0);
+assert(L.inspect({...reference,width:600},2,reference).checked===0);
+console.log('Alignment shifts, tolerance, row/column outliers, reference matching and scan safeguards passed.');
