@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict');
 const C=require('./engine.js');
-const t4={type:'T4',year:'2025',province:'ON',confirmed:true,fields:{16:'4034.10','16A':'396',18:'1077.48',24:'65700',26:'81200',50:'0319748'}};
+const t4={type:'T4',year:'2025',province:'ON',confirmed:true,fields:{16:'4034.10','16A':'396',18:'1077.48',24:'65700',26:'81200',50:'0123456'}};
 assert(!C.check(t4).some(x=>x.status==='mismatch'));
 assert(C.check({...t4,fields:{...t4.fields,18:'1100'}}).some(x=>x.status==='mismatch'));
 assert(C.check({...t4,confirmed:false}).every(x=>x.status!=='pass'));
@@ -9,7 +9,7 @@ assert(C.check({type:'Paystub',confirmed:true,fields:{gross:'2000',deductions:'5
 assert(C.check({type:'T1',confirmed:true,fields:{15000:'100000',23300:'5000',23400:'95000',23500:'0',23600:'95000',25700:'2000',26000:'93000'}}).filter(x=>x.status==='pass').length===3);
 assert(C.check({type:'T2',confirmed:true,fields:{300:'100000',deductions:'20000',360:'80000'}}).some(x=>x.status==='pass'));
 assert(C.amount('')===null);assert(Number.isNaN(C.amount('abc')));assert(C.amount('(1,234.56)')===-1234.56);
-const r=[{y:100,text:'14 165247.19',items:[{str:'14',x:350},{str:'165247.19',x:415}]}];assert.equal(C.candidates(r,'T4')['14'][0].value,'165247.19');
+const r=[{y:100,text:'14 100000.00',items:[{str:'14',x:350},{str:'100000.00',x:415}]}];assert.equal(C.candidates(r,'T4')['14'][0].value,'100000.00');
 console.log('Contribution, arithmetic, missing-input, format, confirmation and extraction checks passed.');
 const L=require('./layout.js');
 const item=(str,x,y,width=45)=>({str,x,y,width,height:10});
@@ -31,3 +31,89 @@ assert.equal(L.locateFinding(navigationDoc,{title:'General review'},1).page,1);
 assert(L.locateFinding(navigationDoc,{title:'General review'},1).note.includes('no precise text location'));
 assert.equal(L.locateFinding(navigationDoc,{title:'Text alignment',page:2,rect:{x:10,y:20,width:30,height:10}},0).page,1);
 console.log('Finding navigation, page selection, targeted regions and no-location fallback passed.');
+
+// Regression cases from the October 1 audit: each previously gave a wrong pass,
+// lost an input, or pointed at an unrelated source value.
+for(const value of ['1,2.00','100)','(100','(-100.00)','1,,000.00','12 34.00','1e3','1.234'])assert(Number.isNaN(C.amount(value)),value);
+assert.equal(C.amount('1,234,567.89'),1234567.89);
+assert.equal(C.amount('1 234.56'),1234.56);
+assert.equal(C.amount('-$1,234.56'),-1234.56);
+const negative=C.check({...t4,fields:{16:'-10'}});
+assert(negative.some(r=>r.status==='mismatch'&&r.fieldKeys.includes('16')));
+assert(!negative.some(r=>r.title==='CPP annual ceiling'&&r.status==='pass'));
+assert.notEqual(C.normal('李 小明'),C.normal('張 偉'));
+assert.notEqual(C.normal('Ann Ab'),C.normal('Anna B'));
+assert(C.check({type:'Paystub',confirmed:true,fields:{},name:'張 偉',expectedName:'李 小明'}).some(r=>r.title==='Name against reference'&&r.status==='mismatch'));
+const missing=C.check({type:'Paystub',confirmed:true,fields:{},expectedName:'Example Worker',expectedAddress:'100 Example Street',name:'',address:''});
+assert(missing.some(r=>r.title==='Name against reference'&&r.status==='review'));
+assert(missing.some(r=>r.title==='Address against reference'&&r.status==='review'));
+const penny=C.check({type:'Paystub',confirmed:true,fields:{gross:'2000',deductions:'500',net:'1500.01'}});
+assert(penny.some(r=>r.title==='Current gross-to-net'&&r.status==='mismatch'));
+assert(C.check({type:'T1',confirmed:true,fields:{43500:'1000',48200:'1500',48400:'500',48500:'500'}}).some(r=>r.title==='Balance owing'&&r.status==='mismatch'));
+assert.equal(C.detect('Gross Pay 15000.00\nNet Pay 12000.00','payment.pdf'),'Paystub');
+assert.equal(C.detect('Income Tax and Benefit Return','T4 mislabeled.pdf'),'T1');
+assert.equal(C.detectYear('Tax year 2025\nPrinted 2026','T4 2026.pdf'),'2025');
+assert.equal(C.detectYear('Pay period 2026-01-01 to 2026-01-14','stub.pdf'),'2026');
+assert.equal(C.detectYear('2024 and 2025','T4 2026.pdf'),'');
+assert.equal(C.detectYear('No year given','T4_2025.pdf'),'2025');
+assert.equal(C.detectYear('Gross Pay 2000.00\nPay period 2026-09-06 to 2026-09-19','stub.pdf'),'2026');
+assert.equal(C.detectYear('T4\n14 2025.00','T4 2024.pdf'),'2024');
+assert.equal(C.candidateKey('14','1,000.00'),C.candidateKey('14','1000.00'));
+assert.notEqual(C.candidateKey('50','0123456'),C.candidateKey('50','123456'));
+const partial=C.check({type:'T4',year:'2025',province:'ON',confirmed:true,cppMonths:'2',fields:{16:'672.35','16A':'30.05',26:'12634.65'}});
+assert(partial.some(r=>r.title==='CPP2 arithmetic'&&r.status==='pass'));
+assert(!partial.some(r=>r.status==='mismatch'));
+assert(C.check({...t4,cppMonths:''}).some(r=>r.title==='CPP2 arithmetic'&&r.status==='review'));
+assert(C.check({...t4,cppMonths:'13'}).some(r=>r.title==='CPP pensionable months'&&r.status==='mismatch'));
+assert(C.check({type:'T4',year:'2026',province:'ON',confirmed:true,cppMonths:'12',fields:{16:'4230.45','16A':'416',18:'1123.07',24:'68900',26:'85000'}}).every(r=>r.status!=='mismatch'));
+const ytdRow={y:100,text:'YTD Gross Pay 20,000.00',items:[item('YTD Gross Pay',10,100),item('20,000.00',200,100)]};
+assert.equal(C.candidates([ytdRow],'Paystub').ytdGross[0].value,'20,000.00');
+assert(!C.candidates([ytdRow],'Paystub').gross);
+assert.equal(C.candidates([{y:100,text:'300 (1,234.56)',items:[item('300',10,100),item('(1,234.56)',200,100)]}],'T2')['300'][0].value,'(1,234.56)');
+const regionDoc={type:'T4',pages:[page([item('50.00',50,100),item('50.00',400,100)])],candidates:{18:[{page:1,value:'50.00',rect:{x:50,y:100,width:45,height:10}}]}};
+const located=L.locateFinding(regionDoc,{title:'EI annual ceiling'},0);
+assert.equal(located.rects.length,1);
+assert.equal(located.rects[0].x,50);
+const unicodeDoc={type:'T4',name:'李 小明',pages:[page([item('李',10,100),item('小明',50,100),item('UNRELATED',200,100)])],candidates:{}};
+assert.equal(L.locateFinding(unicodeDoc,{title:'Name against reference'},0).rects.length,2);
+assert.equal(L.inspect({...reference,cropBox:[0,0,612,792]},2,{...reference,cropBox:[10,0,622,792]}).checked,0);
+const html=require('node:fs').readFileSync(require('node:path').join(__dirname,'index.html'),'utf8');
+for(const province of ['ON','BC','AB','SK','MB','NB','NS','PE','NL','QC','YT','NT','NU'])assert(html.includes('<option value="'+province+'">'+province+'</option>'));
+console.log('Audit regression checks passed: strict amounts, negative deductions, one-cent math, Unicode/missing identities, classification/year, part-year CPP2, 2026 caps, YTD extraction, source regions, crop origins and province options.');
+
+assert(C.check({...t4,fields:{24:'65700.01'}}).some(r=>r.title==='EI earnings ceiling'&&r.status==='mismatch'));
+// Controlled I/O tests exercise the real load/clear handlers without a browser or CDN.
+async function ioChecks(){
+ const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path'),elements=new Map();
+ const element=()=>({value:'',files:[],textContent:'',disabled:false,checked:false,children:[],click(){},addEventListener(){},replaceChildren(...v){this.children=v;},append(...v){this.children.push(...v);}});
+ const context=vm.createContext({window:{Checker:C,addEventListener(){}},LayoutChecker:L,document:{getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element},TextDecoder,Uint8Array,console,Promise});
+ vm.runInContext(fs.readFileSync(path.join(__dirname,'app.js'),'utf8')+'\nshow=()=>{};results=()=>{};preview=async()=>{};',context);
+ const run=code=>vm.runInContext(code,context),input={name:'fictional.pdf',size:5,arrayBuffer:async()=>new TextEncoder().encode('%PDF-').buffer};context.input=input;
+ let destroyed=0;context.fakePdf={numPages:41,destroy:async()=>{destroyed++;}};
+ run('openPdf=async()=>fakePdf');await run('upload([input])');assert.equal(destroyed,1);
+ context.fakePdf={numPages:1,getPage:async()=>{throw Error('Page failed');},destroy:async()=>{destroyed++;}};
+ await run('upload([input])');assert.equal(destroyed,2);
+ const fakePage={view:[0,0,612,792],rotate:0,getTextContent:async()=>({items:[]})};
+ context.fakePdf={numPages:1,getPage:async()=>fakePage,destroy:async()=>{destroyed++;}};
+ run('ocr=async()=>{throw Error("OCR offline");}');await run('upload([input])');
+ assert.equal(run('docs.length'),1);assert(run('docs[0].pages[0].method').startsWith('OCR unavailable'));
+ assert.equal(run('docs[0].province'),'');
+ let exportBlob;context.Blob=Blob;context.URL={createObjectURL(blob){exportBlob=blob;return 'blob:fictional';},revokeObjectURL(){}};
+ run('$("export").onclick()');const exported=JSON.parse(await exportBlob.text());
+ assert.equal(exported.type,'Paystub');assert.equal(exported.inputsConfirmed,false);assert.equal(exported.fields.gross,'');assert(Array.isArray(exported.checks));
+ const target=run('docs[0]');target.reference={name:'old',pages:[]};elements.get('referencePdf').files=[input];
+ run('openPdf=async()=>{throw Error("Bad reference");}');await run('$("referencePdf").onchange()');
+ assert.equal(target.reference,null);assert.equal(elements.get('referencePdf').disabled,false);
+ let release;context.waitingPdf=new Promise(resolve=>{release=resolve;});context.fakePdf={numPages:1,getPage:async()=>fakePage,destroy:async()=>{destroyed++;}};
+ run('openPdf=async()=>waitingPdf');elements.get('referencePdf').files=[input];const pending=run('$("referencePdf").onchange()');
+ run('$("clearReference").onclick()');release(context.fakePdf);await pending;assert.equal(target.reference,null);
+ assert.equal(elements.get('referenceStatus').textContent,'No reference PDF selected.');
+ context.waitingPdf=new Promise(resolve=>{release=resolve;});elements.get('referencePdf').files=[input];const pendingClear=run('$("referencePdf").onchange()');
+ await run('$("clear").onclick()');release(context.fakePdf);await pendingClear;
+ assert.equal(run('docs.length'),0);assert.equal(elements.get('referencePdf').disabled,false);
+ context.bigPage={getViewport({scale}){return{scale,width:100000*scale,height:100000*scale};}};
+ const v=run('viewport(bigPage,1.6)');assert(v.width<=4096&&v.height<=4096&&v.width*v.height<=16777216);
+ console.log('PDF cleanup, OCR fallback, review JSON, reference replacement/removal/clear races and preview-size checks passed.');
+}
+ioChecks().catch(e=>{console.error(e);process.exitCode=1;});
+

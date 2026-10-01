@@ -1,0 +1,61 @@
+# Document Checker audit — October 1, 2026
+
+Audited repository: `amirhosseinforouqi/Document_checker` (formerly `Document_approval`). Baseline: `33e496532edf05439b59c8edaf2ac93be1b92fbc`. All six source files were read. The original `node check.cjs` passed despite the defects below.
+
+The accompanying changes fix 18 groups of reproducible calculation, extraction and state-handling defects. They do not establish that every PDF or every tax calculation is supported. No client PDFs or personal data are included in this repository.
+
+## Findings and fixes
+
+| Priority | Defect in the baseline | Reproduction or consequence | Change |
+|---|---|---|---|
+| P1 | Province dropdown contains closing tags without opening option tags | Only the initial option is reliably selectable; stored province and visible selection can disagree | Generate complete options for all 13 provinces/territories; browser verified 14 options including Not confirmed |
+| P1 | Malformed money strings silently become different numbers | `1,2.00` becomes 12; `100)` becomes 100; `(-100.00)` becomes positive 100 | Strict grouping and balanced signs/parentheses; reject malformed and non-finite values |
+| P1 | Negative contributions pass annual ceiling checks | T4 box 16 of -10 receives a CPP ceiling Pass | Validate amount domains first; invalid negative values cannot receive arithmetic or ceiling passes |
+| P1 | Home address is used as province of employment | A Quebec address can select Quebec rules for an Ontario job | Leave province unconfirmed; instruct the user to read T4 box 10 |
+| P1 | CPP2 assumes full-year pensionable eligibility | CRA's 2025 two-month example has box 26 of 12,634.65 and CPP2 of 30.05; the baseline compares it with zero | Add optional confirmed pensionable months; prorate thresholds and ceilings; unknown months remain Needs review |
+| P1 | Name comparison drops all non-ASCII characters and ignores missing document identities | Different Chinese names both normalize to empty strings and can pass; supplying both references hides absent document names/addresses | Preserve Unicode letters and word boundaries; flag missing document identities |
+| P2 | Exact arithmetic allows two-cent differences | Gross 2,000 less deductions 500 with net 1,500.01 receives Pass | Compare rounded amounts to the cent for T1/T2/paystub equations and hard contribution/earnings ceilings |
+| P2 | T1 checks one refund/balance field and ignores the other | A correct 500 refund plus an incorrect positive balance owing can pass the selected calculation | Check every supplied refund and balance field, including the expected zero counterpart |
+| P2 | Form detection uses any occurrence of 15000 and year detection prioritizes filenames | A 15,000 paystub is classified as T1; a conflicting filename can select the wrong contribution year | Prefer form markers and labelled source years; exclude decimal amounts from loose year matches; ambiguous years stay blank |
+| P2 | Duplicate amounts are compared as strings when populated but numbers when reviewed | `1,000.00` and `1000.00` leave a field blank without a conflict warning | Use the same candidate comparison in both paths; preserve pension-registration leading zeros |
+| P2 | YTD-only paystub labels populate current fields | YTD Gross Pay can be read as current gross | Separate explicit YTD labels; preserve ambiguous multi-value rows as conflicting candidates |
+| P2 | Highlighting searches for equal values anywhere on a page | Two unrelated fields with the same number are both highlighted | Retain candidate rectangles and label rectangles; use shared finding-location logic for clicks and automatic overlays |
+| P2 | Clicking a finding centers the whole canvas rather than its affected region | The right page opens, but the selected value can remain outside the scrolled preview | Focus the selected source region within the preview and keep its explanatory note visible; ignore outdated clicks |
+| P2 | Reference PDFs apply globally, retain old data after failed replacement, and can reappear after removal | Switching T4 to paystub applies the T4 reference; a late load can restore a removed reference | Bind each reference to its document; clear before replacement; ignore outdated loads after Remove/Clear |
+| P2 | A failed PDF-library import prevents the entire UI from starting; failed OCR discards the PDF | Offline/CDN failure disables even the fictional demo; OCR failure loses the readable preview | Load PDF.js on demand; show loading errors; retain the source PDF and manual-review fields if OCR fails |
+| P2 | Failed reads leak PDF resources and OCR canvases | Errors after opening a PDF bypass destruction; failed recognition leaves its canvas allocated | Dispose unowned PDFs and loader tasks on failure; release OCR canvases in finally |
+| P2 | Clear documents leaves text, fields, error filenames and exported Blob links in the DOM | Arrays clear while hidden source values and download data remain accessible | Clear document-derived DOM values and errors, revoke the review URL, and reject late reference completions |
+| P2 | Rendering ignores enormous page dimensions and reference crop origins | A small encoded PDF can require an enormous canvas; equal-sized pages with different crop origins are incorrectly compared | Bound renders to 4,096 pixels per side / 16,777,216 pixels total; reject different crop origins for reference alignment |
+
+2026 CPP/CPP2/EI limits were also added and verified against current CRA sources. The baseline explicitly supported only 2024–2025; this is a coverage update rather than a previously claimed capability.
+
+EI and CPP2 annual-rate differences are review flags rather than unconditional error claims: per-pay rounding and pensionable eligibility require payroll records. Hard negative-value and ceiling violations remain mismatches. Code 40 is included in box 14 once; pension adjustment and actual withholding remain record-dependent.
+
+## Verification
+
+Run `node check.cjs`. It covers the original calculation/alignment/navigation checks plus the audit regressions and controlled asynchronous loading tests. `node --check app.js` checks syntax. The controlled tests verify disposal after page-count/page-read failures, OCR failure fallback, review JSON contents, failed reference replacement, Remove/Clear during reference loading, and oversized viewport handling.
+
+Browser validation used fictional files only:
+
+- Loaded a T4 and a two-page paystub in one batch; a corrupt PDF was rejected while both valid documents remained available.
+- Verified all province choices and the Quebec review guard.
+- Read printed tax year 2025 despite a filename containing 2026; left employment province blank despite a Quebec home address.
+- Extracted current and YTD paystub values separately and flagged a one-cent net-pay mismatch.
+- Started on page 2, clicked the mismatch, and verified that page 1 and its relevant source amounts appeared with red overlays.
+- Loaded an identical reference T4; alignment findings cleared. Switched to the paystub and verified that the T4 reference did not follow it.
+- Entered a negative EI amount, verified the mismatch, and clicked through to its T4 source region.
+- Cleared the documents and verified that name, address, extracted text, error filenames and review download links were empty.
+- Verified that review export produces a visible download link. The preview browser did not report a Blob download event, so actual file saving through that browser remains unverified; exported JSON bytes are checked separately.
+
+## Remaining limits
+
+This remains a document review tool. It does not compute full T1/T2 liabilities, verify document authenticity, validate every schedule, prove a legal identity or address, or reproduce exact employer withholding. Name/address extraction, ambiguous columns, complex forms and scans require manual confirmation. Alignment without a matching template is heuristic and can flag intentional layouts. OCR and PDF libraries require internet access. Large scanned batches can take time; this audit did not add a scan-cancellation workflow.
+
+Fixes on an audit branch do not update the default branch or any hosted deployment until merged and released. Live-host deployment and authentication were outside this repository audit.
+
+## CRA references
+
+- [T4 box instructions, including province of employment](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/completing-filing-information-returns/t4-information-employers/t4-slip.html)
+- [CPP2 calculations and part-year proration](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/calculating-deductions/how-to-calculate/calculate-second-cpp.html)
+- [Payroll guide: 2025 part-year contribution example](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4001/employers-guide-payroll-deductions-remittances.html)
+- [2026 contribution and EI parameters](https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4032-payroll-deductions-tables/t4032ab-jan/t4032ab-january-general-information.html)
