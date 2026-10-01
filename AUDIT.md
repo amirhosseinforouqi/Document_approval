@@ -61,7 +61,7 @@ The native checks cover ID/notice extraction, Current/YTD columns, identity conf
 
 This remains a document review tool. It does not compute full T1/T2 liabilities, verify document authenticity, validate every schedule, prove a legal identity or address, or reproduce exact employer withholding. Name/address extraction, ambiguous columns, complex forms and scans require manual confirmation. Alignment without a matching template is heuristic and can flag intentional layouts. OCR and PDF libraries require internet access. Large scanned batches can take time; this audit did not add a scan-cancellation workflow.
 
-Fixes on an audit branch do not update the default branch or any hosted deployment until merged and released. Live-host deployment and authentication were outside this repository audit.
+Fixes on an audit branch do not update the default branch or production until merged and released. A hosting service may automatically build a PR preview. Live-host deployment and authentication were outside this repository audit.
 
 ## CRA references
 
@@ -72,3 +72,14 @@ Fixes on an audit branch do not update the default branch or any hosted deployme
 - [CRA NOA summary lines and explanations of assessed differences](https://www.canada.ca/en/revenue-agency/services/tax/individuals/educational-programs/after-sending-tax-return.html)
 - [CRA T4 and final-paystub year-to-date comparison](https://www.canada.ca/en/revenue-agency/services/tax/individuals/educational-programs/starting-work.html)
 - [T2 tax/credit line definitions](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4012/t2-corporation-income-tax-guide-chapter-8-page-9-t2-return.html)
+
+
+## Accuracy workflow follow-up — October 1, 2026
+
+The requested accuracy skill is now represented by a browser review ledger, scoped six-status findings, separate severity, evidence-backed document-specific checklists, printable HTML and complete JSON. [ACCURACY.md](ACCURACY.md) maps every policy area to automatic coverage, guided review and remaining limitations. The policy source hash is recorded in the report.
+
+The change reuses the existing checker and preview navigation. Equations now return structured inputs/formula/expected/difference/rounding evidence, and subtraction uses integer cents. Decimal parsing validates exact cents; hour/rate multiplication uses integer arithmetic. Unsafe numeric ranges and unsupported provinces cannot become automatic passes. Explicit T2 deductions totals can be located from their source label. Page review is independent of extracted-input confirmation and requires a rendered page plus notes.
+
+Reports retain every page, candidate occurrence, known blank, unmapped monetary run, canonical widget and extracted text row; arbitrary field semantics remain unverified. Possible duplicate pages, crop-bound concerns, invalid/reversed dates and printed numbering are flagged. Canonical/visible numeric differences are review concerns. Evidence conclusions are bound to the current batch, so edited inputs cannot silently reuse stale confirmations. Sensitive widget/custom identifiers and NETFILE codes are masked, and printable HTML escapes document content.
+
+The native assertion script passes calculation, classification, lifecycle, coverage, privacy, escaping, stale-evidence and export regressions. Browser validation uses eight fictional PDFs / 13 pages: both assessed differences stay review concerns, while a confirmed one-cent net-pay error is an Error and opens red source regions. Missing page evidence is rejected; a single recorded page leaves the other 12 explicitly unreviewed. Full tax liability, per-pay withholding, arbitrary schedules, fine visual completeness and legal identity still require independent evidence-led review. No client records are published.

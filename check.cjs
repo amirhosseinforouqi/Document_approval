@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict');
 const C=require('./engine.js');
+const A=require('./accuracy.js');
 const t4={type:'T4',year:'2025',province:'ON',confirmed:true,fields:{16:'4034.10','16A':'396',18:'1077.48',24:'65700',26:'81200',50:'0123456'}};
 assert(!C.check(t4).some(x=>x.status==='mismatch'));
 assert(C.check({...t4,fields:{...t4.fields,18:'1100'}}).some(x=>x.status==='mismatch'));
@@ -140,11 +141,46 @@ assert.equal(L.locateFinding({type:'T1',pages:[idPage]},{title:'Other amounts',p
 assert(C.check({type:'NOA',confirmed:true,fields:{43500:'1000',48200:'1500',assessmentBalance:'-500'}}).some(r=>r.title==='Balance from this assessment'&&r.status==='pass'));
 assert(C.check({type:'NOA',confirmed:true,fields:{43500:'1000',48200:'1500',assessmentBalance:'-450'}}).some(r=>r.title==='Balance from this assessment'&&r.status==='review'&&r.detail.includes('interest')&&!r.detail.includes('Annual-rate')));
 console.log('Applicant ID, notice extraction, current/YTD columns, matching periods, corporate separation, final-paystub basis, duplicate/superseded records, custom amounts, source targets and batch confirmation checks passed.');
+// The accuracy workflow must expose incomplete coverage, scoped conclusions and private evidence.
+const reviewedPage={...idPage,rendered:true,review:{status:'reviewed',note:'Fictional page inspected at readable zoom, including every populated area and relevant blank.'}};
+const reviewStub={...basic,type:'Paystub',file:'Fictional accuracy stub',fields:{gross:'2000.00',deductions:'500.00',net:'1500.01'},pages:[reviewedPage]};
+const accuracy=A.build([reviewStub],ref);
+assert.equal(accuracy.coverage.visuallyReviewed,1);assert.match(accuracy.coverage.conclusion,/incomplete/);
+const mathError=accuracy.findings.find(r=>r.title==='Current gross-to-net');assert.equal(mathError.status,'Error');assert.equal(mathError.calculation.expected,1500);assert.equal(mathError.calculation.difference,.01);assert.match(mathError.calculation.formula,/gross − deductions/);
+assert.equal(accuracy.fieldLedger.find(r=>r.field==='net').status,'Error');assert.equal(accuracy.fieldLedger.find(r=>r.field==='hours').status,'Not verifiable');
+assert.equal(A.build([{...reviewStub,confirmed:false}],ref).findings.find(r=>r.title==='Current gross-to-net').status,'Needs confirmation');
+const correct={...reviewStub,fields:{gross:'2000.00',deductions:'500.00',net:'1500.00'}};
+assert.equal(A.build([correct],ref).findings.find(r=>r.title==='Current gross-to-net').status,'Verified');
+assert.equal(A.build([{...t4,pages:[reviewedPage]}]).findings.find(r=>r.title==='CPP annual ceiling').status,'Internally consistent');
+assert.equal(A.build([{...correct,pages:[{...reviewedPage,rendered:false}]}]).coverage.visuallyReviewed,0);
+assert.equal(A.build([{...correct,pages:[{...reviewedPage,review:{status:'unreadable',note:'Numbers are clipped.'}}]}]).coverage.unreadable,1);
+assert.equal(A.build([{...correct,pages:[reviewedPage,{...idPage}]}]).coverage.unreviewed,1);
+assert(A.build([{...correct,pages:[reviewedPage,{...reviewedPage}]}]).findings.some(r=>r.title==='Possible duplicate page'));
+assert(A.build([{...correct,pages:[{...reviewedPage,text:'Page 1 of 2'}]}]).findings.some(r=>r.title==='Printed page / PDF page count'));
+assert.equal(A.build(personal,ref).findings.find(r=>r.title==='Line 15000 — NOA ↔ T1').status,'Internally consistent');
+const assessedDifference=A.build(personal,ref).findings.find(r=>r.title==='Line 26000 — NOA ↔ T1');assert.equal(assessedDifference.status,'Needs confirmation');assert.equal(assessedDifference.calculation.difference,-1000);
+correct.accuracyReviews={withholding:{status:'Not applicable',severity:'Major',note:'Fictional test only: no withholding review requested.',basis:A.basis([correct],ref)}};
+assert.equal(A.build([correct],ref).findings.find(r=>r.title==='Exact payroll deductions and eligibility').status,'Not applicable');
+assert.equal(A.build([correct],{...ref,address:'Changed source address'}).findings.find(r=>r.title==='Exact payroll deductions and eligibility').status,'Not verifiable');
+assert.match(A.build([correct],{...ref,address:'Changed source address'}).findings.find(r=>r.title==='Exact payroll deductions and eligibility').detail,/stale/);
+const privateReport=A.build([{...correct,name:'<script>alert(1)</script>',pages:[{...reviewedPage,formFields:[{name:'Driver licence',value:'TEST-ID-PRIVATE',visible:'',rect:{x:40,y:100,width:50,height:10}}],rows:[makeRow('SIN: 123 456 789')]}]}]);
+const printable=A.html(privateReport);assert(!printable.includes('<script>'));assert(printable.includes('&lt;script&gt;'));assert(!printable.includes('123 456 789'));assert(!printable.includes('TEST-ID-PRIVATE'));assert(printable.includes('Complete field ledger'));assert(printable.includes('Print / Save as PDF'));
+assert.equal(C.check({type:'Paystub',confirmed:true,fields:{gross:'.30',deductions:'.10',net:'.20'}}).filter(r=>r.status==='pass').length,0); // Strict formatting remains deliberate.
+assert(C.check({type:'Paystub',confirmed:true,fields:{hours:'0.07',rate:'0.50',regular:'0.04'}}).some(r=>r.title==='Regular earnings'&&r.status==='pass'));
+assert(Number.isNaN(C.amount('100000000000000000.01')));
+assert(A.mask('NETFILE access code AB1CD2EF').includes('[masked identifier]'));
+assert.equal(A.build([{...correct,labels:{'custom:SIN':'SIN'},fields:{'custom:SIN':'1234'}}]).fieldLedger.find(r=>r.field==='custom:SIN').enteredValue,'[masked identifier]');
+assert(A.build([{...correct,pages:[{...reviewedPage,formFields:[{name:'Net pay',value:'1500.00',visible:'1500.01',rect:{x:1,y:2,width:3,height:4}}]}]}]).findings.some(r=>r.title==='PDF form value / appearance difference'));
+assert(A.build([{...correct,payStart:'2025-12-20',payEnd:'2025-12-01'}]).findings.some(r=>r.status==='Error'&&r.title==='Period start is after period end'));
+const changedName=A.build([{...correct,name:'EXAMPLE BLAKE',sourceIdentity:{name:'EXAMPLE ALEX'},identityRegions:identity.regions}]).fieldLedger.find(r=>r.field==='name');assert.equal(changedName.status,'Needs confirmation');assert.match(changedName.displayed,/EXAMPLE ALEX/);assert.equal(changedName.enteredValue,'EXAMPLE BLAKE');
+assert(C.check({...t4,province:'XX'}).every(r=>!r.title.includes('annual ceiling')));
+assert.equal(C.candidates([makeRow('Total deductions from lines 311–352: 20000.00')],'T2').deductions[0].value,'20000.00');
+console.log('Accuracy coverage, exact-cent evidence, six statuses, no unsupported verification, stale review invalidation, print escaping and identifier masking checks passed.');
 // Controlled I/O tests exercise the real load/clear handlers without a browser or CDN.
 async function ioChecks(){
  const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path'),elements=new Map();
  const element=()=>({value:'',files:[],textContent:'',disabled:false,checked:false,children:[],click(){},scrollIntoView(){},addEventListener(){},replaceChildren(...v){this.children=v;},append(...v){this.children.push(...v);}});
- const context=vm.createContext({window:{Checker:C,addEventListener(){}},LayoutChecker:L,document:{getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element},TextDecoder,Uint8Array,console,Promise});
+ const context=vm.createContext({window:{Checker:C,Accuracy:A,addEventListener(){}},LayoutChecker:L,document:{getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element},TextDecoder,Uint8Array,console,Promise});
  vm.runInContext(fs.readFileSync(path.join(__dirname,'app.js'),'utf8')+'\nshow=()=>{};results=()=>{};preview=async()=>{};',context);
  const run=code=>vm.runInContext(code,context),input={name:'fictional.pdf',size:5,arrayBuffer:async()=>new TextEncoder().encode('%PDF-').buffer};context.input=input;
  context.unmappedDoc={type:'T2',confirmed:true,fields:{},candidates:{},pages:[{...page([]),rows:[makeRow('Other charge: 12.34')]}]};
@@ -178,9 +214,17 @@ async function ioChecks(){
  run('docs=bundleFixtures;active=2;applicantSource=docs[0];$("expectedName").value=docs[0].name;$("expectedAddress").value=docs[0].address;$("referenceConfirmed").checked=true;');
  run('$("export").onclick()');const bundleExport=JSON.parse(await exportBlob.text());
  assert.equal(bundleExport.documents.length,3);assert.equal(bundleExport.applicantReference.sourceIndex,0);
+ assert.equal(bundleExport.accuracyReview.coverage.files,3);assert.equal(bundleExport.accuracyReview.coverage.pages,3);assert(bundleExport.accuracyReview.fieldLedger.length>0);
+ run('$('+'"reportHTML"'+').onclick()');const htmlExport=await exportBlob.text();assert(htmlExport.startsWith('<!doctype html>'));assert(htmlExport.includes('Complete field ledger'));
  assert(bundleExport.crossDocumentChecks.some(r=>r.title==='Line 26000 — NOA ↔ T1'&&r.targets[1].docIndex===2));
  await run('focusFinding({title:"Batch source",docIndex:1,fieldKeys:["26000"]})');assert.equal(run('active'),1);
  run('$("clearApplicant").onclick()');assert.equal(run('applicantSource'),null);assert.equal(elements.get('expectedName').value,'');assert.equal(elements.get('referenceConfirmed').checked,false);
+ await run('$("clear").onclick()');assert.equal(run('docs.length'),0);
+ fakePage.getAnnotations=async()=>[{subtype:'Widget',fieldName:'Net pay canonical',fieldValue:'3000.00',rect:[10,10,100,30]}];
+ run('openPdf=async()=>fakePdf');await run('upload([input])');assert.equal(run('docs[0].pages[0].formFields[0].value'),'3000.00');
+ run('$("pageReviewStatus").value="reviewed";$("pageReviewNote").value="Rendered page inspected.";$("savePageReview").onclick()');assert.match(elements.get('status').textContent,/Render and inspect/);
+ run('docs[0].pages[0].rendered=true');run('$("savePageReview").onclick()');assert.equal(run('docs[0].pages[0].review.status'),'reviewed');
+ fakePage.getAnnotations=async()=>{throw Error('Malformed widget');};await run('upload([input])');assert.match(run('docs[1].pages[0].formReadError'),/Malformed widget/);
  await run('$("clear").onclick()');assert.equal(run('docs.length'),0);
  console.log('PDF cleanup, OCR fallback, review JSON, reference replacement/removal/clear races and preview-size checks passed.');
 }

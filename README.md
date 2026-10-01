@@ -1,10 +1,10 @@
 # Document Checker
 
-Serve this folder as a static website. Upload an applicant ID PDF, confirm its extracted name and address, then choose the related financial PDFs together. Documents are processed in the browser, not uploaded to the site. Confirm each document's identity, dates, version and amounts beside its source before accepting matches. Download review exports the complete batch, source page/method coverage, applicant reference and findings as JSON.
+Serve this folder as a static website. Upload an applicant ID PDF, confirm its extracted name and address, then choose the related financial PDFs together. Documents are processed in the browser, not uploaded to the site. Confirm each document's identity, dates, version and amounts beside its source before accepting matches. Download JSON review exports the complete batch and accuracy ledger. Download printable report exports a standalone HTML report with Print / Save as PDF.
 
 ## Applicant ID and document sets
 
-The Applicant ID reference section opens an ID PDF in the normal preview and suggests its name/address. Edit extraction errors, then confirm the reference. Personal T1s, NOAs, T4s and paystubs are compared with that reference. Identifier numbers are not extracted as fields. ID formats and scans vary; missing or ambiguous names/addresses require manual entry from the preview. The tool does not query a registry or certify identity.
+The Applicant ID reference section opens an ID PDF in the normal preview and suggests its name/address. Edit extraction errors, then confirm the reference. Personal T1s, NOAs, T4s and paystubs are compared with that reference. Identifier numbers are not used as applicant comparison inputs. Populated PDF widgets are read locally to check canonical values against their visible appearances; recognized sensitive values are masked in reports. ID formats and scans vary; missing or ambiguous names/addresses require manual entry from the preview. The tool does not query a registry or certify identity.
 
 Corporate NOAs (CNOAs) and T2s are compared with each other; the applicant's personal name is not substituted for a corporation. An optional confirmed company reference supplies the correct company name/address. Capitalization, punctuation, postal-code spacing and supported street abbreviations are normalized; substantive differences and name-order variations remain visible for review.
 
@@ -17,6 +17,16 @@ Corporate NOAs (CNOAs) and T2s are compared with each other; the applicant's per
 Comparisons show both values and their difference. Click a Mismatch or Needs review to select its source document, page and red regions; use either Show source button to inspect the other PDF. Keyboard activation works too. Cross-document equality is labelled internally consistent, not independent tax verification.
 
 Use Add another amount to compare for fields that are not extracted. Use the same label only for the same amount, period and basis; include the applicable year in carry-forward labels. Custom fields are compared in the supported NOA/T1, CNOA/T2 and T4/paystub sets. Blank values stay blank. Unmapped monetary text is separately flagged by page with red preview regions; it is not silently marked checked.
+
+## Accuracy skill workflow
+
+The platform adapts the supplied accuracy skill into automatic checks plus an evidence-led review. See [ACCURACY.md](ACCURACY.md) for the requirement-by-requirement implementation report and remaining limits.
+
+Use **Record review of this page** beneath the preview to record readable visual inspection, partial/unreadable pages, printed page or schedule numbers and evidence. Confirming extracted inputs alone does not review an entire page. Then use **Accuracy skill checklist for this document** for supporting records, eligibility, unsupported arithmetic/schedules, visual details and carry-forwards. Every reviewer conclusion requires notes; changing the batch inputs makes old evidence stale.
+
+**Accuracy review and report** uses Verified, Internally consistent, Error, Needs confirmation, Not verifiable and Not applicable, with separate Critical/Major/Minor severity. It includes formula inputs, expected values, signed differences, rule links and periods, exact source locations, all candidate occurrences, schema blanks, unmapped amounts, canonical PDF form fields and extracted page text rows. Selecting unresolved findings or field-ledger sources opens the original PDF in the red preview.
+
+Printable HTML and JSON include the full ledgers and all findings. Unreviewed pages and missing evidence remain explicit; automatic agreement does not certify eligibility, tax liability, identity or authenticity. Reports mask recognized identifiers and NETFILE codes, but retain names, addresses and amounts; inspect free-text evidence before sharing. The browser does not run an AI agent or execute the SKILL.md file.
 
 ## Coverage
 
