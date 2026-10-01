@@ -29,19 +29,20 @@ function locateFinding(doc,finding,currentPage=0){
  const mappings={'Income tax and pension amounts':['22','20','52'],'Code 40 included in box 14':['40','14'],'Pension registration number format':['50'],'Dental coverage code':['45'],'EI premium arithmetic':['18','24'],'CPP2 arithmetic':['16A','26'],'CPP at maximum earnings':['16','26'],'CPP annual ceiling':['16'],'CPP2 annual ceiling':['16A'],'EI annual ceiling':['18'],'EI earnings ceiling':['24'],'CPP earnings ceiling':['26'],'Current gross-to-net':['gross','deductions','net'],'Regular earnings':['hours','rate','regular'],'Year-to-date gross-to-net':['ytdGross','ytdDeductions','ytdNet'],'Income less deductions':['15000','23300','23400'],'Net income':['23400','23500','23600'],'Taxable income':doc.type==='T1'?['23600','25700','26000']:['300','deductions','360'],'Balance owing':['43500','48200','48500'],'Refund':['43500','48200','48400']};
  let keys=finding.fieldKeys||mappings[finding.title]||[];const conflict=finding.title.match(/^Conflicting (?:box|line|field) (\w+) candidates$/);if(conflict)keys=[conflict[1]];
  const matches=[],positioned=new Set();
+ if(finding.identityKey)for(const region of doc.identityRegions?.[finding.identityKey]||[])if(region.rect&&region.page>=1&&region.page<=doc.pages.length)matches.push({page:region.page-1,rect:region.rect});
  for(const key of keys)for(const candidate of doc.candidates?.[key]||[]){if(candidate.rect&&Number.isInteger(candidate.page)&&candidate.page>=1&&candidate.page<=doc.pages.length){positioned.add(key);matches.push({page:candidate.page-1,rect:candidate.rect});if(candidate.labelRect)matches.push({page:candidate.page-1,rect:candidate.labelRect});}}
  for(let page=0;page<doc.pages.length;page++){
   for(const t of tokens(doc.pages[page])){
    const text=t.str.trim();let match=keys.some(key=>!positioned.has(key)&&key===text);
    for(const key of keys){if(positioned.has(key))continue;const candidates=doc.candidates?.[key]||[];if(candidates.some(v=>v.page===page+1&&C.amount(text)!==null&&Number.isFinite(C.amount(text))&&C.candidateKey(key,text)===C.candidateKey(key,v.value)))match=true;}
-   const identity=finding.title==='Name against reference'?doc.name:finding.title==='Address against reference'||finding.title==='Canadian postal code format'?(doc.address||doc.postal):'';
+   const identity=finding.identityKey&&!doc.identityRegions?.[finding.identityKey]?.length?doc[finding.identityKey]:finding.title==='Name against reference'?doc.name:finding.title==='Address against reference'||finding.title==='Canadian postal code format'?(doc.address||doc.postal):'';
    const needle=C.normal(text);if(identity&&needle&&(' '+C.normal(identity)+' ').includes(' '+needle+' '))match=true;
    if(match)matches.push({page,rect:{x:t.x,y:t.y,width:t.width,height:t.height}});
   }
  }
  const requested=Number.isInteger(finding.page)?finding.page-1:(matches.find(m=>m.page===currentPage)||matches[0])?.page??currentPage;
  const page=Math.max(0,Math.min(doc.pages.length-1,requested));
- const rects=finding.rect?[finding.rect]:matches.filter(m=>m.page===page).map(m=>m.rect);
+ const rects=finding.rects|| (finding.rect?[finding.rect]:matches.filter(m=>m.page===page).map(m=>m.rect));
  return{page,rects,note:rects.length?'Selected result: '+finding.title:'Selected result: '+finding.title+'. This check has no precise text location; inspect the page and the review explanation.'};
 }
 const api={inspect,tokens,locateFinding};if(typeof module!=='undefined')module.exports=api;else root.LayoutChecker=api;

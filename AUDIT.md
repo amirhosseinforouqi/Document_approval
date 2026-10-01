@@ -49,6 +49,16 @@ Browser validation used fictional files only:
 
 ## Remaining limits
 
+### Applicant ID and document-set additions
+
+The follow-up adds an uploaded applicant ID reference with editable extracted name/address and an explicit confirmation gate. Personal documents use that reference; corporate documents use corporate identity, with an optional company reference. Government identifier numbers are not extracted as fields.
+
+Batch reconciliation now compares common NOA/T1 and CNOA/T2 fields, confirmed final-year T4/paystub totals, and adjacent paystub YTD increases. It requires matching identity, year or complete fiscal period, record version and relevant employer/basis inputs. YTD balances are not summed. Superseded documents are excluded and competing records are flagged. Assessment differences remain review items because CRA may adjust a return. Shared custom labels provide manual comparisons for additional amounts in the supported sets; their period and basis require confirmation.
+
+Each comparison reports both values, the difference and source targets. Clicking a non-pass row opens the appropriate document/page with red source regions; separate buttons open either PDF. Unmapped monetary text is flagged by page for visual/manual review. JSON export includes all documents, source page/method coverage, the confirmed reference and cross-document findings; it does not claim that every schedule or visual field was certified.
+
+The native checks cover ID/notice extraction, Current/YTD columns, identity confirmation, company separation, unequal tax/fiscal periods, invalid dates, missing inputs, negative deductions, interim/final/basis constraints, duplicate/superseded records, additional labelled fields, source regions, batch export and source switching. Browser testing uses seven fictional PDFs across 12 pages, including deliberately unequal NOA/T1 taxable income and CNOA/T2 total tax. Both sides of a comparison were opened on page 2 with red highlights. No client records are included.
+
 This remains a document review tool. It does not compute full T1/T2 liabilities, verify document authenticity, validate every schedule, prove a legal identity or address, or reproduce exact employer withholding. Name/address extraction, ambiguous columns, complex forms and scans require manual confirmation. Alignment without a matching template is heuristic and can flag intentional layouts. OCR and PDF libraries require internet access. Large scanned batches can take time; this audit did not add a scan-cancellation workflow.
 
 Fixes on an audit branch do not update the default branch or any hosted deployment until merged and released. Live-host deployment and authentication were outside this repository audit.
@@ -59,3 +69,6 @@ Fixes on an audit branch do not update the default branch or any hosted deployme
 - [CPP2 calculations and part-year proration](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/calculating-deductions/how-to-calculate/calculate-second-cpp.html)
 - [Payroll guide: 2025 part-year contribution example](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4001/employers-guide-payroll-deductions-remittances.html)
 - [2026 contribution and EI parameters](https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4032-payroll-deductions-tables/t4032ab-jan/t4032ab-january-general-information.html)
+- [CRA NOA summary lines and explanations of assessed differences](https://www.canada.ca/en/revenue-agency/services/tax/individuals/educational-programs/after-sending-tax-return.html)
+- [CRA T4 and final-paystub year-to-date comparison](https://www.canada.ca/en/revenue-agency/services/tax/individuals/educational-programs/starting-work.html)
+- [T2 tax/credit line definitions](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4012/t2-corporation-income-tax-guide-chapter-8-page-9-t2-return.html)
