@@ -1,0 +1,6 @@
+interface:
+  display_name: "Accuracy"
+  short_description: "Audit file accuracy, structure, calculations and alignment"
+  default_prompt: "Use $accuracy to exhaustively audit all supplied files for content, calculations, rules, structure, hidden content and visual alignment; provide evidence, a complete coverage ledger and unresolved checks."
+policy:
+  allow_implicit_invocation: true
