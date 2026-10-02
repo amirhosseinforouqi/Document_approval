@@ -3,7 +3,7 @@ const C=require('./engine.js');
 const A=require('./accuracy.js');
 const t4={type:'T4',year:'2025',province:'ON',confirmed:true,fields:{16:'4034.10','16A':'396',18:'1077.48',24:'65700',26:'81200',50:'0123456'}};
 assert(!C.check(t4).some(x=>x.status==='mismatch'));
-assert(C.check({...t4,fields:{...t4.fields,18:'1100'}}).some(x=>x.status==='mismatch'));
+assert(C.check({...t4,fields:{...t4.fields,18:'1100'}}).some(x=>x.title==='EI annual ceiling'&&x.status==='review'));
 assert(C.check({...t4,confirmed:false}).every(x=>x.status!=='pass'));
 assert(C.check({...t4,province:'QC'}).some(x=>x.title==='Quebec contribution rules'));
 assert(C.check({type:'Paystub',confirmed:true,fields:{gross:'2000',deductions:'500',net:'1500'}}).some(x=>x.title==='Current gross-to-net'&&x.status==='pass'));
@@ -18,7 +18,7 @@ const page=items=>({width:612,height:792,rotation:0,method:'PDF text',rows:[{y:1
 const reference=page([item('100.00',100,100),item('EXAMPLE',200,100,60)]);
 assert.equal(L.inspect(reference,2,reference).issues.length,0);
 const moved=page([item('100.00',106,105),item('EXAMPLE',194,96,60)]);
-assert.equal(L.inspect(moved,2,reference).issues.filter(x=>x.status==='mismatch').length,2);
+assert.equal(L.inspect(moved,2,reference).issues.filter(x=>x.status==='review').length,2);
 assert.equal(L.inspect(moved,8,reference).issues.length,0);
 assert(L.inspect(page([item('100.00',100,100),item('200.00',200,106)])).issues.length===2);
 assert(L.inspect(page([item('100.00',100,100),item('200.00',100,80),item('300.00',100,60),item('400.00',107,40)])).issues.some(x=>x.detail.includes('column')));
@@ -45,7 +45,7 @@ assert(!negative.some(r=>r.title==='CPP annual ceiling'&&r.status==='pass'));
 assert.notEqual(C.normal('李 小明'),C.normal('張 偉'));
 assert.notEqual(C.normal('Ann Ab'),C.normal('Anna B'));
 assert.equal(C.normal(undefined),'');assert.equal(C.normal(null),'');
-assert(C.check({type:'Paystub',confirmed:true,fields:{},name:'張 偉',expectedName:'李 小明'}).some(r=>r.title==='Name against reference'&&r.status==='mismatch'));
+assert(C.check({type:'Paystub',confirmed:true,fields:{},name:'張 偉',expectedName:'李 小明'}).some(r=>r.title==='Name against reference'&&r.status==='review'));
 const missing=C.check({type:'Paystub',confirmed:true,fields:{},expectedName:'Example Worker',expectedAddress:'100 Example Street',name:'',address:''});
 assert(missing.some(r=>r.title==='Name against reference'&&r.status==='review'));
 assert(missing.some(r=>r.title==='Address against reference'&&r.status==='review'));
@@ -54,16 +54,16 @@ assert(penny.some(r=>r.title==='Current gross-to-net'&&r.status==='mismatch'));
 assert(C.check({type:'T1',confirmed:true,fields:{43500:'1000',48200:'1500',48400:'500',48500:'500'}}).some(r=>r.title==='Balance owing'&&r.status==='mismatch'));
 assert.equal(C.detect('Gross Pay 15000.00\nNet Pay 12000.00','payment.pdf'),'Paystub');
 assert.equal(C.detect('Income Tax and Benefit Return','T4 mislabeled.pdf'),'T1');
-assert.equal(C.detectYear('Tax year 2025\nPrinted 2026','T4 2026.pdf'),'2025');
+assert.equal(C.detectYear('Tax year 2025\nPrinted 2026','T4 2026.pdf'),'');
 assert.equal(C.detectYear('Pay period 2026-01-01 to 2026-01-14','stub.pdf'),'2026');
 assert.equal(C.detectYear('2024 and 2025','T4 2026.pdf'),'');
-assert.equal(C.detectYear('No year given','T4_2025.pdf'),'2025');
+assert.equal(C.detectYear('No year given','T4_2025.pdf'),'');
 assert.equal(C.detectYear('Gross Pay 2000.00\nPay period 2026-09-06 to 2026-09-19','stub.pdf'),'2026');
-assert.equal(C.detectYear('T4\n14 2025.00','T4 2024.pdf'),'2024');
+assert.equal(C.detectYear('T4\n14 2025.00','T4 2024.pdf'),'');
 assert.equal(C.candidateKey('14','1,000.00'),C.candidateKey('14','1000.00'));
 assert.notEqual(C.candidateKey('50','0123456'),C.candidateKey('50','123456'));
 const partial=C.check({type:'T4',year:'2025',province:'ON',confirmed:true,cppMonths:'2',fields:{16:'672.35','16A':'30.05',26:'12634.65'}});
-assert(partial.some(r=>r.title==='CPP2 arithmetic'&&r.status==='pass'));
+assert(partial.some(r=>r.title==='CPP2 arithmetic'&&r.status==='review'&&r.calculation.difference===0));
 assert(!partial.some(r=>r.status==='mismatch'));
 assert(C.check({...t4,cppMonths:''}).some(r=>r.title==='CPP2 arithmetic'&&r.status==='review'));
 assert(C.check({...t4,cppMonths:'13'}).some(r=>r.title==='CPP pensionable months'&&r.status==='mismatch'));
@@ -180,7 +180,7 @@ console.log('Accuracy coverage, exact-cent evidence, six statuses, no unsupporte
 async function ioChecks(){
  const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path'),elements=new Map();
  const element=()=>({value:'',files:[],textContent:'',disabled:false,checked:false,children:[],click(){},scrollIntoView(){},addEventListener(){},replaceChildren(...v){this.children=v;},append(...v){this.children.push(...v);}});
- const context=vm.createContext({window:{Checker:C,Accuracy:A,addEventListener(){}},LayoutChecker:L,document:{getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element},TextDecoder,Uint8Array,console,Promise});
+ const context=vm.createContext({window:{Checker:C,Accuracy:A,addEventListener(){}},LayoutChecker:L,document:{getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element},TextDecoder,Uint8Array,crypto:require('node:crypto').webcrypto,console,Promise});
  vm.runInContext(fs.readFileSync(path.join(__dirname,'app.js'),'utf8')+'\nshow=()=>{};results=()=>{};preview=async()=>{};',context);
  const run=code=>vm.runInContext(code,context),input={name:'fictional.pdf',size:5,arrayBuffer:async()=>new TextEncoder().encode('%PDF-').buffer};context.input=input;
  context.unmappedDoc={type:'T2',confirmed:true,fields:{},candidates:{},pages:[{...page([]),rows:[makeRow('Other charge: 12.34')]}]};
@@ -196,9 +196,14 @@ async function ioChecks(){
  assert.equal(run('docs[0].province'),'');
  let exportBlob;context.Blob=Blob;context.URL={createObjectURL(blob){exportBlob=blob;return 'blob:fictional';},revokeObjectURL(){}};
  run('$("export").onclick()');const exported=JSON.parse(await exportBlob.text());
- assert.equal(exported.type,'Paystub');assert.equal(exported.inputsConfirmed,false);assert.equal(exported.fields.gross,'');assert(Array.isArray(exported.checks));
+ assert.equal(exported.type,'Unknown');assert.equal(exported.inputsConfirmed,false);assert.equal(exported.fields.gross,undefined);assert(Array.isArray(exported.checks));
+ assert.equal(exported.schemaVersion,3);assert.equal(exported.sha256,require('node:crypto').createHash('sha256').update('%PDF-').digest('hex'));
+ assert.equal(exported.documents[0].sha256,exported.sha256);assert.equal(exported.accuracyReview.documents[0].sha256,exported.sha256);
+ assert.equal(exported.documents[0].pages[0].previewRendered,false);assert.equal(exported.documents[0].pages[0].alignment.execution,'blocked');
+ assert.equal(exported.accuracyReview.documents[0].pages[0].alignment.execution,'blocked');
  assert.equal(exported.documents.length,1);assert.equal(exported.documents[0].pages.length,1);assert(Array.isArray(exported.crossDocumentChecks));assert.equal(exported.applicantReference.confirmed,false);
  const target=run('docs[0]');target.reference={name:'old',pages:[]};elements.get('referencePdf').files=[input];
+ assert(run('findings(docs[0])').some(r=>r.title.includes('alignment not performed')));
  run('openPdf=async()=>{throw Error("Bad reference");}');await run('$("referencePdf").onchange()');
  assert.equal(target.reference,null);assert.equal(elements.get('referencePdf').disabled,false);
  let release;context.waitingPdf=new Promise(resolve=>{release=resolve;});context.fakePdf={numPages:1,getPage:async()=>fakePage,destroy:async()=>{destroyed++;}};
@@ -208,6 +213,9 @@ async function ioChecks(){
  context.waitingPdf=new Promise(resolve=>{release=resolve;});elements.get('referencePdf').files=[input];const pendingClear=run('$("referencePdf").onchange()');
  await run('$("clear").onclick()');release(context.fakePdf);await pendingClear;
  assert.equal(run('docs.length'),0);assert.equal(elements.get('referencePdf').disabled,false);
+ context.missingReferenceDoc={type:'T4',name:'EXAMPLE',confirmed:true,fields:{},candidates:{},pages:[page([item('100.00',100,100)])],reference:{name:'Fictional reference',pages:[reference]}};
+ context.mockCanvas={getContext:()=>({fillRect(){},strokeRect(){}}),setAttribute(){}};context.mockViewport={convertToViewportRectangle:x=>x};
+ run('$("overlays").checked=true;drawOverlays(missingReferenceDoc,0,mockViewport,mockCanvas)');
  context.bigPage={getViewport({scale}){return{scale,width:100000*scale,height:100000*scale};}};
  const v=run('viewport(bigPage,1.6)');assert(v.width<=4096&&v.height<=4096&&v.width*v.height<=16777216);
  context.bundleFixtures=personal.map(d=>({...d,pdf:null}));
@@ -230,3 +238,58 @@ async function ioChecks(){
 }
 ioChecks().catch(e=>{console.error(e);process.exitCode=1;});
 
+
+// Preserved latest-main regressions after conflict resolution.
+{
+// Regressions: no silent number coercion, rounding tolerance or unsupported classification.
+for(const value of ['1,23.45','12,34,567.89','1 2.00','(12.00','12.00)','(-12.00)','--12','1e3','Infinity','900719925474099.99']) assert(Number.isNaN(C.amount(value)),value);
+assert.equal(C.amount('$ 1,234.50'),1234.5);
+assert.equal(C.amount('(1 234.50)'),-1234.5);
+assert.equal(C.cents('0.29'),29);
+assert.equal(C.detect('Unrelated invoice'), 'Unknown');
+assert.equal(C.detect('T4 and T1 supporting package'), 'Unknown');
+assert.equal(C.detect('Statement of Remuneration Paid'), 'T4');
+assert.equal(C.detectYear('Tax year 2025; issued 2026'), '');
+assert.equal(C.detectYear('Tax year 2025'), '2025');
+assert.equal(C.normal('JOSE'), 'JOSE');
+assert.notEqual(C.normal('JOS�'),C.normal('JOS'));
+const pay=fields=>C.check({type:'Paystub',confirmed:true,fields});
+assert(pay({gross:'1.00',deductions:'0.00',net:'0.99'}).some(r=>r.title==='Current gross-to-net'&&r.status==='mismatch'));
+assert(pay({gross:'1.00',deductions:'0.71',net:'0.29'}).some(r=>r.title==='Current gross-to-net'&&r.status==='pass'));
+assert(pay({hours:'1.50',rate:'1.01',regular:'1.52'}).some(r=>r.title==='Regular earnings'&&r.status==='pass'));
+assert(pay({hours:'-1.50',rate:'1.01',regular:'-1.52'}).some(r=>r.title==='Regular earnings'&&r.status==='pass'));
+assert(pay({gross:'abc',deductions:'0',net:'0'}).some(r=>r.title==='Current gross-to-net'&&r.status==='review'));
+assert(C.check({...t4,fields:{...t4.fields,16:'-1'}}).some(r=>r.title==='CPP annual ceiling'&&r.status==='mismatch'));
+assert(C.check({...t4,province:'XX'}).every(r=>!r.title.endsWith('annual ceiling')));
+assert(C.check({...t4,confirmed:false,fields:{18:'bad'}}).every(r=>r.status==='review'));
+assert(C.check(t4).filter(r=>['EI premium arithmetic','CPP2 arithmetic','CPP at maximum earnings'].includes(r.title)).every(r=>r.status==='review'));
+assert(C.check({type:'Unknown',confirmed:true,fields:{}}).some(r=>r.title==='Document type required'));
+assert(C.check({type:'T1',confirmed:true,fields:{43500:'100',48200:'120',48400:'20',48500:'5'}}).some(r=>r.title==='Refund/balance contradiction'&&r.status==='mismatch'));
+assert(C.check({type:'T1',confirmed:true,fields:{}}).some(r=>r.title==='Refund or balance'));
+assert(C.check({type:'T1',confirmed:true,fields:{},expectedName:'EXAMPLE',name:''}).some(r=>r.title==='Name against reference'&&r.status==='review'));
+assert.equal(L.inspect(reference,NaN).execution,'blocked');
+assert.equal(L.inspect({...reference,view:[10,0,622,792]},2,reference).execution,'blocked');
+assert(L.inspect(page([item('123.00',600,100,40)])).issues.some(r=>r.detail.includes('crop')));
+assert.equal(L.inspect({...reference,method:'OCR'}).execution,'blocked');
+assert.equal(L.inspect(page([])).execution,'blocked');
+const missing=L.inspect(page([item('100.00',100,100)]),2,reference).issues.find(r=>r.title==='Reference region missing');
+assert(missing && !missing.rect);
+assert.equal(L.locateFinding(navigationDoc,{title:'General review',page:99},0).page,1);
+assert.equal(L.locateFinding({type:'T4',name:'EXAMPLE',pages:[page([item('---',10,10)])]},{title:'Name against reference'},0).rects.length,0);
+console.log('Strict amounts, exact cents, half-cent rounding, unsupported inputs, conditional rules, audit gaps and safe geometry regressions passed.');
+
+assert.equal(C.cents('90071992547409.91'),Number.MAX_SAFE_INTEGER);
+assert(Number.isNaN(C.cents('90071992547409.92')));
+assert(C.check({...t4,year:'__proto__'}).some(r=>r.title==='Year-specific contribution rules'));
+const mainHtml=require('node:fs').readFileSync(require('node:path').join(__dirname,'index.html'),'utf8');
+const provinceSelect=mainHtml.match(/<select id="province">([\s\S]*?)<\/select>/)[1];
+const provinceOptions=[...provinceSelect.matchAll(/<option(?: [^>]*)?>([^<]*)<\/option>/g)].map(m=>m[1]);
+assert.deepEqual(provinceOptions,['Not confirmed','ON','BC','AB','SK','MB','NB','NS','PE','NL','QC','YT','NT','NU']);
+console.log('Exact precision boundary, inherited year-key and usable province-option regressions passed.');
+}
+
+
+assert.notEqual(C.normal("O'NEIL"),C.normal('O NEIL'));
+assert.equal(C.detect('Unrelated invoice','T4 2025.pdf'),'Unknown');
+assert.equal(A.redact({sha256:'a123456789'+'f'.repeat(54)}).sha256,'a123456789'+'f'.repeat(54));
+assert.equal(L.locateFinding(navigationDoc,{title:'General review'},NaN).page,0);

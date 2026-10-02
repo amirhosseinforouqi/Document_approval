@@ -1,8 +1,9 @@
 (function(root){
 const limits={2024:{cpp:3867.50,cpp2:188,ei:1049.12,ympe:68500,yampe:73200,mie:63200,rate:.0166},2025:{cpp:4034.10,cpp2:396,ei:1077.48,ympe:71300,yampe:81200,mie:65700,rate:.0164},2026:{cpp:4230.45,cpp2:416,ei:1123.07,ympe:74600,yampe:85000,mie:68900,rate:.0163}};
 const schemas={T4:{14:'Employment income',22:'Income tax deducted',16:'CPP contributions','16A':'CPP2 contributions',18:'EI premiums',24:'EI insurable earnings',26:'CPP pensionable earnings',20:'Employee RPP contributions',52:'Pension adjustment',50:'Pension registration number',40:'Taxable benefits',45:'Dental coverage code'},T1:{15000:'Total income',23300:'Deductions before adjustments',23400:'Net income before adjustments',23500:'Social benefits repayment',23600:'Net income',25700:'Taxable-income deductions',26000:'Taxable income',43500:'Total payable',48200:'Total credits',48400:'Refund',48500:'Balance owing'},T2:{300:'Net income for income tax purposes',deductions:'Total deductions from lines 311–352 (confirm from return)',360:'Taxable income'},Paystub:{gross:'Current gross earnings',deductions:'Current total deductions',net:'Current net pay',hours:'Regular hours',rate:'Regular hourly rate',regular:'Regular earnings',ytdGross:'Year-to-date gross',ytdDeductions:'Year-to-date deductions',ytdNet:'Year-to-date net'}};
-function amount(v){if(v===undefined||v===null||String(v).trim()==='')return null;let s=String(v).trim(),negative=false;if(s.length>100)return NaN;if(s.startsWith('(')&&s.endsWith(')')){negative=true;s=s.slice(1,-1).trim();}else if(s.startsWith('-')){negative=true;s=s.slice(1).trim();}s=s.replace(/^\$\s*/, '');if(!/^(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,3}(?: \d{3})+)(?:\.\d{1,2})?$/.test(s))return NaN;const [whole,fraction='']=s.replace(/[, ]/g,'').split('.');if(whole.replace(/^0+/,'').length>14)return NaN;const cents=Number(BigInt(whole)*100n+BigInt(fraction.padEnd(2,'0'))),n=cents/100;return Number.isSafeInteger(cents)&&Math.round(n*100)===cents?(negative?-n:n):NaN;}
-function normal(s){return String(s??'').normalize('NFKC').toUpperCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();}
+function amount(v){const c=cents(v);if(c===null)return null;const n=c/100;return Number.isFinite(c)&&Math.round(Math.abs(n)*100)===Math.abs(c)?n:NaN;}
+function cents(v){if(v===undefined||v===null||String(v).trim()==='')return null;let s=String(v).trim(),negative=false;if(s.length>100)return NaN;if(s.startsWith('(')&&s.endsWith(')')){negative=true;s=s.slice(1,-1).trim();}else if(s.startsWith('-')){negative=true;s=s.slice(1).trim();}s=s.replace(/^\$\s*/,'');if(!/^(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,3}(?: \d{3})+)(?:\.\d{1,2})?$/.test(s))return NaN;const[whole,fraction='']=s.replace(/[, ]/g,'').split('.');if(whole.replace(/^0+/,'').length>14)return NaN;const n=BigInt(whole)*100n+BigInt(fraction.padEnd(2,'0'));return n<=BigInt(Number.MAX_SAFE_INTEGER)?Number(negative?-n:n):NaN;}
+function normal(s){return String(s??'').normalize('NFKC').toUpperCase().trim().replace(/\s+/g,' ');}
 Object.assign(schemas.T1,{10100:'Employment income',35000:'Federal non-refundable tax credits',61500:'Provincial non-refundable tax credits',42000:'Net federal tax',42800:'Net provincial tax',43700:'Income tax deducted'});
 Object.assign(schemas.T2,{700:'Part I tax payable',760:'Net provincial/territorial tax payable',770:'Total tax payable',890:'Total credits'});
 schemas.NOA=Object.fromEntries(['15000','23600','26000','35000','61500','42000','42800','43500','43700','48200'].map(k=>[k,schemas.T1[k]]));
@@ -11,41 +12,44 @@ schemas.NOA.assessmentBalance=schemas.CNOA.assessmentBalance='Balance from this 
 schemas.ID={};
 Object.assign(schemas.Paystub,{taxableGross:'Current taxable gross',incomeTax:'Current total income tax',cpp:'Current CPP',cpp2:'Current CPP2',ei:'Current EI',rpp:'Current RPP',unionDues:'Current union dues'});
 for(const k of ['taxableGross','incomeTax','cpp','cpp2','ei','rpp','unionDues'])schemas.Paystub['ytd'+k[0].toUpperCase()+k.slice(1)]=schemas.Paystub[k].replace('Current','Year-to-date');
-function detect(text,file=''){if(/\bnotice of (?:re)?assessment\b|avis de (?:nouvelle )?cotisation/i.test(text))return /\b(?:corporation|corporate|T2)\b|\b(?:\d{9}\s*)?RC\s*\d{4}\b/i.test(text)?'CNOA':'NOA';for(const [type,re] of [['T4',/Statement of Remuneration|(?:^|\n)\s*T4\b/i],['T2',/Corporation Income Tax|(?:^|\n)\s*T2\b/i],['T1',/Income Tax and Benefit Return|(?:^|\n)\s*T1\b/i]])if(re.test(text))return type;if(/\b(?:gross pay|gross earnings|total earnings|net pay|net deposit)\b/i.test(text))return 'Paystub';const m=file.replace(/_/g,' ').match(/\b(CNOA|NOA|T4|T2|T1)\b/i);return m?m[1].toUpperCase():'Paystub';}
-function detectYear(text,file=''){const explicit=[...text.matchAll(/\b(?:tax(?:ation)? year|pay year|year|ann[eé]e)\s*[:\-]?\s*(20\d{2})\b/gi)].map(m=>m[1]);const source=explicit.length?explicit:[...text.matchAll(/\b20\d{2}\b(?![.,]\d)/g)].map(m=>m[0]);const values=[...new Set(source.length?source:(file.replace(/_/g,' ').match(/\b20\d{2}\b/g)||[]))];return values.length===1?values[0]:'';}
+schemas.Unknown={};
+function detect(text){if(/\bnotice of (?:re)?assessment\b|avis de (?:nouvelle )?cotisation/i.test(text))return /\b(?:corporation|corporate|T2)\b|\b(?:\d{9}\s*)?RC\s*\d{4}\b/i.test(text)?'CNOA':'NOA';const matches=[['T4',/Statement of Remuneration|\bT4\b/i],['T2',/Corporation Income Tax|\bT2\b/i],['T1',/Income Tax and Benefit Return|\bT1\b/i],['Paystub',/\b(?:pay\s*stub|pay statement|earnings statement|gross pay|gross earnings|total earnings|net pay|net deposit)\b/i]].filter(([,re])=>re.test(text));return matches.length===1?matches[0][0]:'Unknown';}
+function detectYear(text){const years=[...new Set([...text.matchAll(/\b20\d{2}\b(?![.,]\d)/g)].map(m=>m[0]))];return years.length===1?years[0]:'';}
 function candidateKey(key,value){return key==='50'?String(value).trim():amount(value);}
 function money(v){return Number(v).toLocaleString('en-CA',{style:'currency',currency:'CAD'});}
-function check(doc){const out=[];const f=doc.fields;const a=k=>amount(f[k]);const add=(status,title,detail,fieldKeys)=>out.push({status,title,detail,...(fieldKeys?{fieldKeys}:{})});
-const signed=['T1','NOA'].includes(doc.type)?['15000','assessmentBalance']:['T2','CNOA'].includes(doc.type)?['300','assessmentBalance']:[];
+function check(doc){const out=[];const f=doc.fields||{};const a=k=>amount(f[k]);const add=(status,title,detail,fieldKeys)=>out.push({status,title,detail,...(fieldKeys?{fieldKeys}:{})});
+const signed=['T1','NOA'].includes(doc.type)?['15000','assessmentBalance']:['T2','CNOA'].includes(doc.type)?['300','assessmentBalance']:doc.type==='Paystub'?['hours','rate','regular']:[];
 const valid=k=>Number.isFinite(a(k))&&(a(k)>=0||signed.includes(k));
 function eq(title,keys,calc,target,differenceStatus='mismatch',reviewNote='Annual-rate comparison; payroll rounding and contribution eligibility require supporting records.'){
  const all=[...keys,target],formulas={'Current gross-to-net':'gross − deductions = net','Regular earnings':'hours × rate = regular earnings','Year-to-date gross-to-net':'YTD gross − YTD deductions = YTD net','Income less deductions':'max(0, line 15000 − line 23300) = line 23400','Net income':'max(0, line 23400 − line 23500) = line 23600','Taxable income':doc.type==='T1'?'max(0, line 23600 − line 25700) = line 26000':'max(0, line 300 − deductions from lines 311–352) = line 360','Balance owing':'max(0, line 43500 − line 48200) = line 48500','Refund':'max(0, line 48200 − line 43500) = line 48400','Balance from this assessment':keys.join(' − ')+' = assessment balance before other adjustments','EI premium arithmetic':'box 24 × '+limits[doc.year]?.rate+' = box 18 (annual-rate comparison)','CPP2 arithmetic':'max(0, min(box 26, '+limits[doc.year]?.yampe+' × months / 12) − '+limits[doc.year]?.ympe+' × months / 12) × 0.04 = box 16A'};
  const calculation={formula:formulas[title],inputs:keys.map(key=>({key,displayed:f[key]??'',value:a(key)})),target,reported:f[target]??'',expected:null,difference:null,rounding:'Compare integer cents; multiplication rounded to the nearest cent. Payroll per-payment rounding remains a separate check.'};
  if(all.some(k=>a(k)===null)){add('review',title,'Missing input. Blank values are not treated as zero.',all);out.at(-1).calculation=calculation;return;}
- if(all.some(k=>!valid(k)))return;
+ if(all.some(k=>!valid(k))){add('review',title,'Not calculated: invalid or unsupported signed input. Check the source and correction records.',all);out.at(-1).calculation=calculation;return;}
  // Money subtraction uses integer cents; hours and rates retain their stated units.
  const arithmetic=['Current gross-to-net','Year-to-date gross-to-net','Income less deductions','Net income','Taxable income','Balance owing','Refund','Balance from this assessment'].includes(title);
- const expectedCents=arithmetic?Math.round(calc(...keys.map(k=>Math.round(a(k)*100)))):title==='Regular earnings'?Number((BigInt(Math.round(a('hours')*100))*BigInt(Math.round(a('rate')*100))+50n)/100n):Math.round(calc(...keys.map(a))*100),actualCents=Math.round(a(target)*100);
+ const product=title==='Regular earnings'?BigInt(cents(f.hours))*BigInt(cents(f.rate)):0n;
+ const expectedCents=arithmetic?Math.round(calc(...keys.map(k=>cents(f[k])))):title==='Regular earnings'?Number((product<0n?-1n:1n)*((product<0n?-product:product)+50n)/100n):Math.round(calc(...keys.map(a))*100),actualCents=cents(f[target]);
  if(!Number.isSafeInteger(expectedCents)||!Number.isSafeInteger(actualCents-expectedCents)){add('review',title,'Calculation exceeds the safe integer-cent range; an exact independent calculation is required.',all);out.at(-1).calculation=calculation;return;}
  const expected=expectedCents/100,difference=(actualCents-expectedCents)/100;
- add(actualCents===expectedCents?'pass':differenceStatus,title,`Expected ${money(expected)}; reported ${money(a(target))}; difference ${money(difference)}.${differenceStatus==='review'?' '+reviewNote:''}`,all);
+ const conditional=/^(?:EI premium arithmetic|CPP2 arithmetic)$/.test(title);
+ add(conditional?'review':actualCents===expectedCents?'pass':differenceStatus,title,`Expected ${money(expected)}; reported ${money(a(target))}; difference ${money(difference)}.${differenceStatus==='review'?' '+reviewNote:''}`,all);
  out.at(-1).calculation={...calculation,expected,difference};
 }
-Object.entries(f).forEach(([k,v])=>{if(a(k)===null)return;if(!Number.isFinite(a(k)))add('mismatch',schemas[doc.type][k]||k,'Invalid number format.',[k]);else if(!valid(k))add(doc.type==='Paystub'?'review':'mismatch',schemas[doc.type][k]||k,'Negative amount: check the source and any correction records. This value is not accepted by the ordinary arithmetic checks.',[k]);});
+Object.entries(f).forEach(([k,v])=>{if(a(k)===null)return;if(!Number.isFinite(a(k)))add('mismatch',schemas[doc.type]?.[k]||k,'Invalid number format or unsupported precision.',[k]);else if(!valid(k))add(doc.type==='Paystub'?'review':'mismatch',schemas[doc.type]?.[k]||k,'Negative amount: check the source and any correction records. This value is not accepted by the ordinary arithmetic checks.',[k]);});
 if(!doc.confirmed)add('review','Confirm extracted values','Compare every value with the PDF before relying on the results.');
 if(doc.type==='T4'){
- const l=limits[doc.year];if(!l)add('review','Year-specific contribution rules','Automatic CPP/EI rules cover 2024–2026 only.');
+ const l=Object.hasOwn(limits,doc.year)?limits[doc.year]:null;if(!l)add('review','Year-specific contribution rules','Automatic CPP/EI rules cover 2024–2026 only.');
  else if(!doc.province)add('review','Province required','Confirm the province of employment before applying CPP and EI rules.');
  else if(!['ON','BC','AB','SK','MB','NB','NS','PE','NL','QC','YT','NT','NU'].includes(doc.province))add('review','Province required','Unsupported province of employment; verify the applicable jurisdiction before applying contribution rules.');
  else if(doc.province==='QC')add('review','Quebec contribution rules','QPP and Quebec EI rules require a separate calculation; federal CPP rules were not applied.');
  else {
  const months=amount(doc.cppMonths),eligible=Number.isInteger(months)&&months>=0&&months<=12;
  if(months!==null&&!eligible)add('mismatch','CPP pensionable months','Enter a whole number from 0 to 12, or leave unknown.', ['cppMonths']);
- for(const [k,fullMax,label] of [['16',l.cpp,'CPP'],['16A',l.cpp2,'CPP2'],['18',l.ei,'EI']]){const max=k==='18'||!eligible?fullMax:Math.round(fullMax*months/12*100)/100;if(valid(k))add(a(k)-max>.005?'mismatch':'pass',label+' annual ceiling',`${money(a(k))} compared with maximum ${money(max)}${k!=='18'&&eligible?' for '+months+' pensionable months':''}. Below the ceiling does not by itself verify the deduction.`,[k]);}
+ for(const [k,fullMax,label] of [['16',l.cpp,'CPP'],['16A',l.cpp2,'CPP2'],['18',l.ei,'EI']]){const max=k==='18'||!eligible?fullMax:Math.round(fullMax*months/12*100)/100;if(a(k)===null)add('review',label+' annual ceiling','Missing contribution amount.',[k]);else if(Number.isFinite(a(k)))add(a(k)<0?'mismatch':a(k)>max?'review':'pass',label+' annual ceiling',`${money(a(k))} compared with maximum ${money(max)}${k!=='18'&&eligible?' for '+months+' pensionable months':''}. Negative contributions are invalid. An excess requires payroll review: a slip may correctly report unreimbursed overdeductions. Below the ceiling does not verify the deduction.`,[k]);}
  eq('EI premium arithmetic',['24'],v=>v*l.rate,'18','review');
  if(!eligible)add('review','CPP2 arithmetic','Confirm CPP pensionable months (0–12). Age, CPT30 elections and disability can change the annual earnings thresholds; 12 months is not assumed.',['16A','26']);
  else eq('CPP2 arithmetic',['26'],v=>Math.max(0,Math.min(v,l.yampe*months/12)-l.ympe*months/12)*.04,'16A','review');
- if(eligible&&valid('26')&&a('26')>=l.ympe*months/12&&valid('16')){const expected=Math.round(l.cpp*months/12*100)/100;add(Math.abs(a('16')-expected)<.005?'pass':'review','CPP at maximum earnings',`Expected ceiling ${money(expected)} for ${months} pensionable months; reported ${money(a('16'))}. Verify per-pay contributions and eligibility.`,['16','26']);}
+ if(eligible&&valid('26')&&a('26')>=l.ympe*months/12&&valid('16')){const expected=Math.round(l.cpp*months/12*100)/100;add('review','CPP at maximum earnings',`Expected ceiling ${money(expected)} for ${months} pensionable months; reported ${money(a('16'))}. Verify per-pay contributions and eligibility.`,['16','26']);}
  if(valid('24')&&a('24')-l.mie>.005)add('mismatch','EI earnings ceiling',`Box 24 exceeds ${money(l.mie)}.`,['24']);
  if(valid('26')&&a('26')-l.yampe>.005)add('mismatch','CPP earnings ceiling',`Box 26 exceeds ${money(l.yampe)}.`,['26']);
  }
@@ -57,7 +61,7 @@ if(doc.type==='T4'){
  eq('Income less deductions',['15000','23300'],(x,y)=>Math.max(0,x-y),'23400');
  eq('Net income',['23400','23500'],(x,y)=>Math.max(0,x-y),'23600');
  eq('Taxable income',['23600','25700'],(x,y)=>Math.max(0,x-y),'26000');
- if(valid('43500')&&valid('48200')){if(a('43500')>a('48200')||a('48500')!==null)eq('Balance owing',['43500','48200'],(x,y)=>Math.max(0,x-y),'48500');if(a('48200')>a('43500')||a('48400')!==null)eq('Refund',['48200','43500'],(x,y)=>Math.max(0,x-y),'48400');if(a('43500')===a('48200')&&a('48400')===null&&a('48500')===null)add('review','Refund / balance owing','Expected zero; neither refund nor balance owing was supplied.',['48400','48500']);}
+ if(valid('43500')&&valid('48200')){const owing=a('43500')>a('48200');if(owing||a('48500')!==null)eq('Balance owing',['43500','48200'],(x,y)=>Math.max(0,x-y),'48500');if(!owing||a('48400')!==null)eq('Refund',['48200','43500'],(x,y)=>Math.max(0,x-y),'48400');const opposite=owing?'48400':'48500';if(valid(opposite)&&a(opposite)!==0)add('mismatch','Refund/balance contradiction','The opposite refund/balance field is nonzero.',[opposite]);if(a('43500')===a('48200')&&a('48400')===null&&a('48500')===null)add('review','Refund / balance owing','Expected zero; neither refund nor balance owing was supplied.',['48400','48500']);}else add('review','Refund or balance','Missing or invalid total payable/credits; final balance was not calculated.',['43500','48200']);
  add('review','Return completeness','These checks cover summary arithmetic only. Income components, schedules, credits, residency and final tax liability need a full tax review.');
 }else if(doc.type==='T2'){
  eq('Taxable income',['300','deductions'],(x,y)=>Math.max(0,x-y),'360');
@@ -73,20 +77,20 @@ if(doc.type==='T4'){
  add('review','Assessment explanations','Compare with the corresponding return. CRA adjustments, interest, payments and prior balances can explain differences; the account balance or deposit is not the return refund.');
 }else if(doc.type==='ID'){
  add('review','Applicant ID reference','Confirm the extracted name and full address against the ID preview before using them as the batch reference. ID numbers are not extracted.');
-}
+}else add('review','Document type required','Unrecognized or mixed document. Select a supported type only after checking its contents; no financial rules applied.');
 if(doc.postal)add(/^[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z][ -]?\d[ABCEGHJ-NPRSTV-Z]\d$/i.test(doc.postal)?'pass':'mismatch','Canadian postal code format','Format check only; it does not establish that the address exists.');
-if(doc.expectedName)add(!normal(doc.name||'')?'review':normal(doc.expectedName)===normal(doc.name)?'pass':'mismatch','Name against reference',doc.name?`Document: ${doc.name}; reference: ${doc.expectedName}.`:'The document name is missing. Read and confirm it from the source.');
-if(doc.expectedAddress)add(!normal(doc.address||'')?'review':addressKey(doc.expectedAddress)===addressKey(doc.address)?'pass':'mismatch','Address against reference',doc.address?`Document: ${doc.address}; reference: ${doc.expectedAddress}.`:'The document address is missing. Read and confirm it from the source.');
+if(doc.expectedName)add(!normal(doc.name||'')?'review':normal(doc.expectedName)===normal(doc.name)?'pass':'review','Name against reference',doc.name?`Document: ${doc.name}; reference: ${doc.expectedName}. Confirm spelling, ordering and legal identity against the source.`:'The document name is missing. Read and confirm it from the source.');
+if(doc.expectedAddress)add(!normal(doc.address||'')?'review':addressKey(doc.expectedAddress)===addressKey(doc.address)?'pass':'review','Address against reference',doc.address?`Document: ${doc.address}; reference: ${doc.expectedAddress}. Confirm differences or a documented move.`:'The document address is missing. Read and confirm it from the source.');
 if(!doc.expectedName||!doc.expectedAddress)add('review','Spelling and address reference','Provide the correct name and address to check spelling. Proper names and street names cannot be verified by a general spellchecker.');
-return out.map(r=>!doc.confirmed&&r.status==='pass'?{...r,status:'review',detail:'Tentative: '+r.detail}:r);
+return out.map(r=>!doc.confirmed&&r.status!=='review'?{...r,status:'review',detail:'Tentative: '+r.detail}:r);
 }
 function rows(items){const sorted=items.filter(i=>i.str.trim()).map(i=>({...i,x:i.transform[4],y:i.transform[5]})).sort((a,b)=>b.y-a.y||a.x-b.x);const rs=[];for(const i of sorted){let row=rs.find(r=>Math.abs(r.y-i.y)<3);if(!row){row={y:i.y,items:[]};rs.push(row);}row.items.push(i);}for(const r of rs){r.items.sort((a,b)=>a.x-b.x);r.text=r.items.map(i=>i.str).join(' ');}return rs;}
 function t4Candidates(rs){const result={};
  const tokens=rs.flatMap(r=>r.items.map(i=>({...i,y:i.y??r.y,evidence:r.text})));
- for(const label of tokens){const key=label.str.trim();if(!Object.hasOwn(schemas.T4,key))continue;const integer=key==='50'||key==='45';const values=tokens.filter(t=>t.x-label.x>8&&t.x-label.x<145&&label.y-t.y>=-3&&label.y-t.y<18&&(integer?/^\d+$/:/^\(?-?\$?[\d,]+\.\d{2}\)?$/).test(t.str.trim())).sort((a,b)=>Math.abs(label.y-a.y)-Math.abs(label.y-b.y)||a.x-b.x);const value=values[0];if(value&&(key!=='50'||value.str.trim().length>=6))(result[key]??=[]).push({value:value.str.trim(),evidence:value.evidence,rect:rect(value),labelRect:rect(label)});}
+ for(const label of tokens){const key=label.str.trim();if(!Object.hasOwn(schemas.T4,key))continue;const integer=key==='50'||key==='45';const values=tokens.filter(t=>t.x-label.x>8&&t.x-label.x<145&&label.y-t.y>=-3&&label.y-t.y<18&&(integer?/^\d+$/:/^\(?-?\$?[\d,]+\.\d{2}\)?$/).test(t.str.trim())).sort((a,b)=>Math.abs(label.y-a.y)-Math.abs(label.y-b.y)||a.x-b.x);const value=values[0];if(value)(result[key]??=[]).push({value:value.str.trim(),evidence:value.evidence,rect:rect(value),labelRect:rect(label)});}
 return result;}
 function rect(item){return{x:item.x,y:item.y,width:item.width||Math.max(5,item.str.length*5),height:item.height||10};}
-function addressKey(value){const aliases={ST:'STREET',RD:'ROAD',AVE:'AVENUE',DR:'DRIVE',BLVD:'BOULEVARD',CRES:'CRESCENT',CRT:'COURT',APT:'UNIT',APARTMENT:'UNIT',ONTARIO:'ON',QUEBEC:'QC',ALBERTA:'AB',MANITOBA:'MB',SASKATCHEWAN:'SK'};return normal(value).replace(/\b([A-Z]\d[A-Z]) (\d[A-Z]\d)\b/g,'$1$2').split(' ').map(w=>aliases[w]||w).join(' ');}
+function addressKey(value){const aliases={ST:'STREET',RD:'ROAD',AVE:'AVENUE',DR:'DRIVE',BLVD:'BOULEVARD',CRES:'CRESCENT',CRT:'COURT',APT:'UNIT',APARTMENT:'UNIT',ONTARIO:'ON',QUEBEC:'QC',ALBERTA:'AB',MANITOBA:'MB',SASKATCHEWAN:'SK'};return normal(value).replace(/[,.]/g,' ').replace(/\s+/g,' ').trim().replace(/\b([A-Z]\d[A-Z]) (\d[A-Z]\d)\b/g,'$1$2').split(' ').map(w=>aliases[w]||w).join(' ');}
 function labels(doc){return{...schemas[doc.type],...doc.labels};}
 function candidates(rs,type){
  if(type==='T4')return t4Candidates(rs);if(type==='ID')return{};
@@ -180,6 +184,6 @@ function batch(docs,reference={}){
  }
  return out;
 }
-const api={limits,schemas,amount,money,check,normal,addressKey,labels,rows,candidates,identity,batch,validDate,detect,detectYear,candidateKey};if(typeof module!=='undefined')module.exports=api;else root.Checker=api;
+const api={limits,schemas,amount,cents,money,check,normal,addressKey,labels,rows,candidates,identity,batch,validDate,detect,detectYear,candidateKey};if(typeof module!=='undefined')module.exports=api;else root.Checker=api;
 })(globalThis);
 

@@ -6,7 +6,7 @@ Serve this folder as a static website. Upload an applicant ID PDF, confirm its e
 
 The Applicant ID reference section opens an ID PDF in the normal preview and suggests its name/address. Edit extraction errors, then confirm the reference. Personal T1s, NOAs, T4s and paystubs are compared with that reference. Identifier numbers are not used as applicant comparison inputs. Populated PDF widgets are read locally to check canonical values against their visible appearances; recognized sensitive values are masked in reports. ID formats and scans vary; missing or ambiguous names/addresses require manual entry from the preview. The tool does not query a registry or certify identity.
 
-Corporate NOAs (CNOAs) and T2s are compared with each other; the applicant's personal name is not substituted for a corporation. An optional confirmed company reference supplies the correct company name/address. Capitalization, punctuation, postal-code spacing and supported street abbreviations are normalized; substantive differences and name-order variations remain visible for review.
+Corporate NOAs (CNOAs) and T2s are compared with each other; the applicant's personal name is not substituted for a corporation. An optional confirmed company reference supplies the correct company name/address. Names normalize capitalization and whitespace while preserving meaningful Unicode and punctuation differences. Address comparisons also normalize commas, periods, postal-code spacing and supported street abbreviations; other differences and name-order variations remain visible for review.
 
 - NOA + T1: compare common income, tax and credit lines for the same named person and calendar year. An assessed difference is Needs review, because CRA adjustments and displayed rounding can explain it.
 - CNOA + T2: compare confirmed common income/tax lines for the same company and fiscal start/end dates. A calendar-year match alone is insufficient.
@@ -21,6 +21,10 @@ Use Add another amount to compare for fields that are not extracted. Use the sam
 ## Accuracy skill workflow
 
 The platform adapts the supplied accuracy skill into automatic checks plus an evidence-led review. See [ACCURACY.md](ACCURACY.md) for the requirement-by-requirement implementation report and remaining limits.
+
+The full guided [accuracy skill](skills/accuracy/SKILL.md) and its [Document Checker supplement](skills/accuracy/references/document-checker.md) are retained in the repository. They guide an assistant's exhaustive audit; the website's selected automatic checks and recorded review workflow do not execute an AI model or guarantee a complete audit.
+
+Type/year suggestions use document content. Unknown or mixed types and conflicting years require confirmation; filenames do not supply missing values. JSON exports include the source file's SHA-256 when available, preview-rendered state, per-page alignment execution and the selected reference/tolerance. Blocked alignment is a review finding, never a hidden pass. Annual contribution comparisons require payroll evidence, and a slip may correctly report unreimbursed overdeductions.
 
 Use **Record review of this page** beneath the preview to record readable visual inspection, partial/unreadable pages, printed page or schedule numbers and evidence. Confirming extracted inputs alone does not review an entire page. Then use **Accuracy skill checklist for this document** for supporting records, eligibility, unsupported arithmetic/schedules, visual details and carry-forwards. Every reviewer conclusion requires notes; changing the batch inputs makes old evidence stale.
 
