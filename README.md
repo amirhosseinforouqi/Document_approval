@@ -1,42 +1,74 @@
 # Document Checker
 
-A browser-based review aid for Canadian T4, T1, T2 and paystub PDFs. Confirm suggested inputs against the PDF before relying on a result. Only the listed checks are automated; this application is not an exhaustive document audit or a tax/payroll calculation engine.
+Serve this folder as a static website. Upload an applicant ID PDF, confirm its extracted name and address, then choose the related financial PDFs together. Documents are processed in the browser, not uploaded to the site. Confirm each document's identity, dates, version and amounts beside its source before accepting matches. Download JSON review exports the complete batch and accuracy ledger. Download printable report exports a standalone HTML report with Print / Save as PDF.
 
-## Run and check
+## Applicant ID and document sets
 
-Serve this directory with `python -m http.server 8000` and open `http://localhost:8000`. Run `node check.cjs` for deterministic arithmetic, parsing, extraction and geometry regressions. No build step is required. PDF.js and OCR libraries/language data load from external CDNs, so an internet connection is needed. Document content is processed locally and is not uploaded by the application.
+The Applicant ID reference section opens an ID PDF in the normal preview and suggests its name/address. Edit extraction errors, then confirm the reference. Personal T1s, NOAs, T4s and paystubs are compared with that reference. Identifier numbers are not used as applicant comparison inputs. Populated PDF widgets are read locally to check canonical values against their visible appearances; recognized sensitive values are masked in reports. ID formats and scans vary; missing or ambiguous names/addresses require manual entry from the preview. The tool does not query a registry or certify identity.
 
-## Guided accuracy skill
+Corporate NOAs (CNOAs) and T2s are compared with each other; the applicant's personal name is not substituted for a corporation. An optional confirmed company reference supplies the correct company name/address. Names normalize capitalization and whitespace while preserving meaningful Unicode and punctuation differences. Address comparisons also normalize commas, periods, postal-code spacing and supported street abbreviations; other differences and name-order variations remain visible for review.
 
-The complete [accuracy skill](skills/accuracy/SKILL.md) is included at `skills/accuracy/`. Copy that whole directory to your skill installation directory when needed. It includes structural, field-by-field, financial, source reconciliation and rendered alignment audit instructions. Read its [Document Checker supplement](skills/accuracy/references/document-checker.md) when auditing or changing this app. The skill guides the agent; it does not run inside the browser app.
+- NOA + T1: compare common income, tax and credit lines for the same named person and calendar year. An assessed difference is Needs review, because CRA adjustments and displayed rounding can explain it.
+- CNOA + T2: compare confirmed common income/tax lines for the same company and fiscal start/end dates. A calendar-year match alone is insufficient.
+- T4 + paystubs: compare annual income, tax, CPP, CPP2, EI and RPP totals with the confirmed final paystub for the same employer and year. Use explicit YTD taxable gross, or confirm that YTD gross includes the same taxable earnings/benefits. Interim stubs do not establish annual totals.
+- Multiple paystubs: check YTD increases against current amounts only when the employee, employer, year and adjacent periods are confirmed. Gaps, overlaps and possible adjustments remain review items. YTD balances are never summed.
+- Original/amended and assessed/reassessed records stay separate. Mark superseded records to exclude them; duplicate or competing records prevent automatic reconciliation passes.
 
-## Automated coverage
+Comparisons show both values and their difference. Click a Mismatch or Needs review to select its source document, page and red regions; use either Show source button to inspect the other PDF. Keyboard activation works too. Cross-document equality is labelled internally consistent, not independent tax verification.
 
-- T4: selected CRA-style candidate fields; 2024 and 2025 CPP/CPP2/EI ceilings outside Quebec; conditional annual contribution comparisons; pension-number and dental-code formats; conflicting extracted candidates.
-- T1: selected summary arithmetic and contradictory refund/balance checks.
-- T2: selected taxable-income arithmetic with a manually supplied deductions total.
-- Paystub: current and YTD gross-to-net and regular hours times rate.
-- Identity: comparison with supplied names/addresses and postal-code format. Differences need confirmation; legal identity and address existence are not verified.
-- Geometry: possible amount-row, column and name-baseline outliers; possible page-crop overflow; heuristic comparison against a reference with matching dimensions, crop origin, rotation and page order.
+Use Add another amount to compare for fields that are not extracted. Use the same label only for the same amount, period and basis; include the applicable year in carry-forward labels. Custom fields are compared in the supported NOA/T1, CNOA/T2 and T4/paystub sets. Blank values stay blank. Unmapped monetary text is separately flagged by page with red preview regions; it is not silently marked checked.
 
-Unknown or mixed document types require selection. Type/year suggestions use content; conflicting years remain blank. Province of employment must be confirmed from its source, not inferred from a mailing address. Numeric inputs accept ungrouped digits or consistent comma/space thousands groups and at most two decimal places; alternative decimal locales or higher-precision rates require manual review. Invalid or unsupported input is never silently repaired.
+## Accuracy skill workflow
 
-Confirmed arithmetic compares exact cents with no blanket two-cent allowance. Product rounding uses half away from zero. Missing inputs remain blank. Annual contribution estimates remain Needs review because payroll rounding, eligibility and actual withholding need source records. A T4 may correctly report unreimbursed overdeductions; an excess is not automatically a transcription error.
+The platform adapts the supplied accuracy skill into automatic checks plus an evidence-led review. See [ACCURACY.md](ACCURACY.md) for the requirement-by-requirement implementation report and remaining limits.
 
-## Results and layout
+The full guided [accuracy skill](skills/accuracy/SKILL.md) and its [Document Checker supplement](skills/accuracy/references/document-checker.md) are retained in the repository. They guide an assistant's exhaustive audit; the website's selected automatic checks and recorded review workflow do not execute an AI model or guarantee a complete audit.
 
-Pass means only the stated check passed on confirmed inputs. Editing inputs invalidates confirmation. No financial mismatch is presented as confirmed before inputs are confirmed. Alignment pairings are heuristic and produce Needs review rather than proven errors.
+Type/year suggestions use document content. Unknown or mixed types and conflicting years require confirmation; filenames do not supply missing values. JSON exports include the source file's SHA-256 when available, preview-rendered state, per-page alignment execution and the selected reference/tolerance. Blocked alignment is a review finding, never a hidden pass. Annual contribution comparisons require payroll evidence, and a slip may correctly report unreimbursed overdeductions.
 
-Click a Mismatch or Needs review row, or press Enter/Space while it is focused, to open its page and any locatable overlay. Missing reference regions are not drawn at invented actual-document locations. Red overlays never modify the PDF. Default layout tolerance is 2 PDF points, adjustable from 0.5 to 12; it is an outlier threshold, not a universal standard. Scans, mismatched page geometry, missing reference pages and unusable text explicitly report blocked alignment checks.
+Use **Record review of this page** beneath the preview to record readable visual inspection, partial/unreadable pages, printed page or schedule numbers and evidence. Confirming extracted inputs alone does not review an entire page. Then use **Accuracy skill checklist for this document** for supporting records, eligibility, unsupported arithmetic/schedules, visual details and carry-forwards. Every reviewer conclusion requires notes; changing the batch inputs makes old evidence stale.
 
-Download review exports JSON with confirmed inputs, checks, file SHA-256 when available, page-level extraction/alignment coverage, preview-rendered state, reference/tolerance and unperformed audit dimensions. A rendered preview does not establish human visual review. The read-only WebMCP tool also includes coverage when supported.
+**Accuracy review and report** uses Verified, Internally consistent, Error, Needs confirmation, Not verifiable and Not applicable, with separate Critical/Major/Minor severity. It includes formula inputs, expected values, signed differences, rule links and periods, exact source locations, all candidate occurrences, schema blanks, unmapped amounts, canonical PDF form fields and extracted page text rows. Selecting unresolved findings or field-ledger sources opens the original PDF in the red preview.
 
-## Limits and privacy
+Printable HTML and JSON include the full ledgers and all findings. Unreviewed pages and missing evidence remain explicit; automatic agreement does not certify eligibility, tax liability, identity or authenticity. Reports mask recognized identifiers and NETFILE codes, but retain names, addresses and amounts; inspect free-text evidence before sharing. The browser does not run an AI agent or execute the SKILL.md file.
 
-Maximum 20 MB and 40 pages per PDF. English OCR is attempted on pages with very little extracted text; mixed image/text pages can still contain unrecognized values. Complete form-tree/appearance agreement, hidden content, attachments, cryptographic signatures, all document fields/schedules, statutory eligibility, cross-source reconciliation and human visual review are not automated. Follow the full skill for those checks and report unavailable evidence.
+## Coverage
 
-PDFs are never changed or added to this repository. No browser storage or server document storage is used. Clearing/closing discards application state; downloaded reviews remain on disk and can contain sensitive values. CDN-loaded code executes in the page: local processing is not a claim of offline isolation.
+- T4: candidate extraction for CRA-style slips; 2024–2026 CPP/CPP2/EI ceilings and selected arithmetic outside Quebec; pension-number and dental-code formats; duplicate-copy candidate conflicts; year comparisons for matching confirmed identities. Confirm employment province from box 10, not the employee's home address. Optional CPP pensionable months (0–12) control proration; unknown months remain a review flag.
+- T1: selected summary lines, income/deduction arithmetic, refund/balance arithmetic.
+- T2: lines 300 and 360, with a manually confirmed total of deductions from lines 311–352; selected tax/credit fields for CNOA comparison, without recalculating liability.
+- NOA/CNOA: known line numbers or labelled summary amounts, assessment-balance arithmetic where supplied, and comparisons to the corresponding return. Account balances, deposits, instalments and carry-forwards are not silently equated to return refunds.
+- Paystubs: gross minus deductions equals net, hours times rate equals regular earnings, year-to-date gross-to-net; current and YTD tax/CPP/CPP2/EI/RPP and taxable gross. Explicit YTD labels and supported Current/YTD columns are kept separate; ambiguous multi-value rows require confirmation.
+- Spelling: comparison against a user-supplied correct name/address and differences across documents. Proper-name ordering and address abbreviations may trigger review. Postal-code format is checked; street existence is not verified.
+- Scans: English OCR and page preview. Low-resolution or complex scans may yield no reliable numeric candidates; manually enter values from the source. Extraction never changes the PDF.
 
-## Audit and validation
+## Limits
 
-See [AUDIT.md](AUDIT.md) for findings, fixes and verification limits. The current deterministic regression suite and JavaScript syntax checks pass. Browser checks confirmed the demo flow, tentative results, all 13 selectable provinces/territories and Quebec rule gating. Browser PDF upload/rendering was blocked by the extension's file-access setting, so this revision has not completed end-to-end PDF/OCR/overlay testing. Do not treat historical browser testing of previous revisions as verification of this revision.
+This is a review aid, not a tax filing or payroll engine. It does not calculate full T1/T2 tax liability, validate every schedule, verify legal names or postal addresses, or calculate exact per-pay withholding. CPP eligibility, age, exemptions and multiple provinces/employers may require manual review. No deduction or blank value is invented. Only specified equations are checked; a passing result does not establish overall correctness or document authenticity.
+
+Maximum 20 MB and 40 pages per PDF. Reading libraries and OCR language data need an internet connection. PDF.js is loaded when a PDF is opened, so a blocked library does not disable the fictional demo. Failed OCR leaves the source available for manual review. Rendering is bounded to 4,096 pixels per side and 16,777,216 pixels. No browser storage or server-side document storage is used. Clearing documents also clears document-derived inputs, text, errors and export links; downloaded review files remain where the user saves them.
+
+## Validation
+
+Run `node check.cjs` for the calculation, extraction, alignment and asynchronous loading checks. See [AUDIT.md](AUDIT.md) for the October 1, 2026 findings, regression cases, browser validation and remaining limits. The updated code was browser-tested with fictional PDFs; no client documents are included. Review JSON generation is checked, but file saving through the preview browser could not be confirmed.
+
+## Run locally
+
+From the repository folder, run `python -m http.server 8000`, then open `http://localhost:8000`. Any static web server works. Opening `index.html` directly may block the browser modules.
+
+The repository contains only application code and documentation, never uploaded PDFs. No build or package installation is required. Run `node check.cjs` to verify the calculation rules.
+
+## Alignment and preview overlays
+
+The preview marks locatable numerical mismatches and alignment findings in red. Use Show on preview to open the affected page. Toggle Show errors in red to inspect the original rendering; the PDF itself is never changed.
+
+Automatic alignment checks flag probable amount-row baseline differences, amount-column right-edge outliers, and name fragments on different baselines. These are review flags, not proof that the layout is wrong. Different rows and columns can be intentional.
+
+For more precise comparisons, select a correctly aligned reference PDF using the same template, page dimensions, crop origin, rotation and page order. Each document keeps its own reference. Names/text compare left edges; numbers compare right edges and baselines. The report gives the measured left/right/up/down displacement. Default tolerance is 2 PDF points and can be adjusted from 0.5 to 12 points. Different text lengths, text-run segmentation, templates or missing regions may need manual review. Arbitrary PDFs cannot be guaranteed perfectly aligned by these heuristics.
+
+Scanned PDFs retain OCR and preview support, but precise alignment checking is skipped because OCR positions are approximate. Test coverage includes directional shifts, tolerance changes, row and column outliers, mismatched reference dimensions, scan safeguards, visible red canvas overlays, preview navigation and mobile width.
+
+## Click a review result
+
+Every Mismatch and Needs review row is selectable. Click anywhere on the row, or focus it and press Enter or Space, to immediately show its page in the preview and enable red overlays. Alignment findings and locatable field checks highlight the relevant text. General reviews and missing inputs without an identifiable source region still open the preview and explain that there is no precise text location. Passing rows remain informational.
+

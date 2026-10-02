@@ -1,4 +1,5 @@
 (function(root){
+const C=root.Checker||(typeof module!=='undefined'?require('./engine.js'):null);
 const median=xs=>{const s=[...xs].sort((a,b)=>a-b);return s[Math.floor(s.length/2)];};
 function tokens(page){return (page.rows||[]).flatMap(r=>r.items.map(i=>({...i,y:i.y??r.y,height:Math.max(5,i.height||Math.hypot(i.transform?.[2]||0,i.transform?.[3]||10)),width:Math.max(2,i.width||2)}))).filter(i=>i.str.trim()&&Number.isFinite(i.x)&&Number.isFinite(i.y)&&Number.isFinite(i.width)&&Number.isFinite(i.height));}
 function kind(t){const s=t.str.trim();if(/^\(?-?\$?[\d,]+(?:\.\d{1,2})?\)?$/.test(s))return'number';if(/[A-Z]{2}/.test(s)&&s===s.toUpperCase()&&/[A-Z]/.test(s))return'name';return null;}
@@ -8,11 +9,11 @@ function inspect(page,tolerance=2,reference=null,name=''){
  const ts=tokens(page),issues=[];const flag=(t,detail,status='review',expected=null)=>issues.push({status,title:'Text alignment',detail,text:t.str,rect:{x:t.x,y:t.y,width:t.width,height:t.height},expected});
  if(page.method?.startsWith('OCR'))return{issues:[],checked:0,execution:'blocked',note:'OCR coordinates are approximate. Alignment needs visual review; automatic position checks are skipped for scans.'};
  if(!Number.isFinite(page.width)||!Number.isFinite(page.height)||!ts.length)return{issues:[],checked:0,execution:'blocked',note:'No usable page geometry or text. Automatic layout checks were not performed.'};
- const view=page.view||[0,0,page.width,page.height];
+ const view=page.cropBox||page.view||[0,0,page.width,page.height];
  for(const t of ts)if(t.x<view[0]-tolerance||t.x+t.width>view[2]+tolerance||t.y<view[1]-tolerance||t.y>view[3]+tolerance)flag(t,'Text bounds may extend beyond the visible page crop. Inspect for clipped content.');
  if(reference){
   if(reference.method?.startsWith('OCR'))return{issues,checked:0,execution:'blocked',note:'Use a text-based reference PDF for precise alignment checks.'};
-  if(page.width!==reference.width||page.height!==reference.height||page.rotation!==reference.rotation||JSON.stringify(view)!==JSON.stringify(reference.view||[0,0,reference.width,reference.height]))return{issues,checked:0,execution:'blocked',note:'Page dimensions, crop origin or rotation differ from the reference. Position comparison was not performed.'};
+  if(page.width!==reference.width||page.height!==reference.height||page.rotation!==reference.rotation||JSON.stringify(view)!==JSON.stringify(reference.cropBox||reference.view||[0,0,reference.width,reference.height]))return{issues,checked:0,execution:'blocked',note:'Page dimensions, crop origin or rotation differ from the reference. Position comparison was not performed.'};
   const refs=tokens(reference).filter(kind),actual=ts.filter(kind),used=new Set();let checked=0;
   const pairs=[];
   // ponytail: nearby text-run matching assumes the same template; use field-region matching for redesigned forms.
@@ -30,21 +31,24 @@ function inspect(page,tolerance=2,reference=null,name=''){
 }
 function locateFinding(doc,finding,currentPage=0){
  const mappings={'Income tax and pension amounts':['22','20','52'],'Code 40 included in box 14':['40','14'],'Pension registration number format':['50'],'Dental coverage code':['45'],'EI premium arithmetic':['18','24'],'CPP2 arithmetic':['16A','26'],'CPP at maximum earnings':['16','26'],'CPP annual ceiling':['16'],'CPP2 annual ceiling':['16A'],'EI annual ceiling':['18'],'EI earnings ceiling':['24'],'CPP earnings ceiling':['26'],'Current gross-to-net':['gross','deductions','net'],'Regular earnings':['hours','rate','regular'],'Year-to-date gross-to-net':['ytdGross','ytdDeductions','ytdNet'],'Income less deductions':['15000','23300','23400'],'Net income':['23400','23500','23600'],'Taxable income':doc.type==='T1'?['23600','25700','26000']:['300','deductions','360'],'Balance owing':['43500','48200','48500'],'Refund':['43500','48200','48400']};
- let keys=finding.fieldKeys||mappings[finding.title]||[];const conflict=finding.title.match(/^Conflicting (?:box|line) (\w+) candidates$/);if(conflict)keys=[conflict[1]];
- const matches=[];
+ let keys=finding.fieldKeys||mappings[finding.title]||[];const conflict=finding.title.match(/^Conflicting (?:box|line|field) (\w+) candidates$/);if(conflict)keys=[conflict[1]];
+ const matches=[],positioned=new Set();
+ if(finding.identityKey)for(const region of doc.identityRegions?.[finding.identityKey]||[])if(region.rect&&region.page>=1&&region.page<=doc.pages.length)matches.push({page:region.page-1,rect:region.rect});
+ for(const key of keys)for(const candidate of doc.candidates?.[key]||[]){if(candidate.rect&&Number.isInteger(candidate.page)&&candidate.page>=1&&candidate.page<=doc.pages.length){positioned.add(key);matches.push({page:candidate.page-1,rect:candidate.rect});if(candidate.labelRect)matches.push({page:candidate.page-1,rect:candidate.labelRect});}}
  for(let page=0;page<doc.pages.length;page++){
   for(const t of tokens(doc.pages[page])){
-   const text=t.str.trim();let match=keys.includes(text);
-   for(const key of keys){const candidates=doc.candidates?.[key]||[];if(candidates.some(v=>v.page===page+1&&text.replace(/[$, ]/g,'')===v.value.replace(/[$, ]/g,'')))match=true;}
-   const identity=finding.title==='Name against reference'?doc.name:finding.title==='Address against reference'||finding.title==='Canadian postal code format'?(doc.address||doc.postal):'';
-   const normalized=text.toUpperCase().replace(/[^A-Z0-9]/g,'');if(identity&&normalized.length>1&&identity.toUpperCase().replace(/[^A-Z0-9]/g,'').includes(normalized))match=true;
+   const text=t.str.trim();let match=keys.some(key=>!positioned.has(key)&&key===text);
+   for(const key of keys){if(positioned.has(key))continue;const candidates=doc.candidates?.[key]||[];if(candidates.some(v=>v.page===page+1&&C.amount(text)!==null&&Number.isFinite(C.amount(text))&&C.candidateKey(key,text)===C.candidateKey(key,v.value)))match=true;}
+   const identity=finding.identityKey&&!doc.identityRegions?.[finding.identityKey]?.length?doc[finding.identityKey]:finding.title==='Name against reference'?doc.name:finding.title==='Address against reference'||finding.title==='Canadian postal code format'?(doc.address||doc.postal):'';
+   const needle=C.normal(text);if(identity&&needle&&(' '+C.normal(identity)+' ').includes(' '+needle+' '))match=true;
    if(match)matches.push({page,rect:{x:t.x,y:t.y,width:t.width,height:t.height}});
   }
  }
  const requested=Number.isInteger(finding.page)?finding.page-1:(matches.find(m=>m.page===currentPage)||matches[0])?.page??currentPage;
  const page=Math.max(0,Math.min(doc.pages.length-1,Number.isInteger(requested)?requested:0));
- const rects=finding.rect?[finding.rect]:matches.filter(m=>m.page===page).map(m=>m.rect);
+ const rects=finding.rects|| (finding.rect?[finding.rect]:matches.filter(m=>m.page===page).map(m=>m.rect));
  return{page,rects,note:rects.length?'Selected result: '+finding.title:'Selected result: '+finding.title+'. This check has no precise text location; inspect the page and the review explanation.'};
 }
 const api={inspect,tokens,locateFinding};if(typeof module!=='undefined')module.exports=api;else root.LayoutChecker=api;
 })(globalThis);
+
